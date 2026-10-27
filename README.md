@@ -1,0 +1,132 @@
+# Meeting Notes Agent 🎙️
+
+Widget kecil yang bisa kamu klik saat rapat: ia mendengarkan, mentranskripsi secara **lokal** di
+laptopmu, lalu membuat notulen dalam **Bahasa Indonesia** (ringkasan, keputusan, action item, dan
+transkrip lengkap) dalam format **Markdown (.md)** dan **Word (.docx)**.
+
+Cocok untuk rapat online (Zoom, Google Meet, Teams) maupun offline. Agent ini tidak perlu ikut
+join ke meeting, karena ia merekam langsung dari mikrofon dan speaker laptopmu.
+
+```
+ ┌────────────────────┐
+ │       12:34        │   ● Mulai Catat         → mulai mendengarkan
+ │  ▃▃▃▃▃▃▃▁▁▁▁▁▁▁▁   │   ■ Selesai & Rangkum   → transkripsi + ringkasan
+ │ ■ Selesai & Rangkum│   Buka folder notulen   → lihat hasilnya
+ │ Mendengarkan...    │
+ └────────────────────┘
+```
+
+## Cara kerja
+
+```
+Mikrofon + audio speaker ──► rekaman WAV (lokal)
+                               │
+                               ▼
+                    Whisper (faster-whisper, lokal) ──► transkrip
+                               │
+                               ▼
+                    Claude API ──► ringkasan Bahasa Indonesia
+                               │
+                               ▼
+                 ~/MeetingNotes/2026-10-27_0930_judul-rapat.md / .docx
+```
+
+- **Audio tidak pernah keluar dari laptopmu.** Rekaman dan transkripsi diproses sepenuhnya di perangkat.
+- Yang dikirim ke Claude hanya **teks transkrip**, untuk dirangkum.
+- Tanpa API key pun aplikasi tetap jalan, tapi hanya menyimpan transkrip (tanpa ringkasan).
+
+## Instalasi
+
+Butuh **Python 3.10+** (dengan Tkinter, yang sudah termasuk di installer Python resmi untuk Windows & macOS).
+
+```bash
+git clone https://github.com/hisyamhwr/coba.git
+cd coba
+python -m venv .venv
+# Windows: .venv\Scripts\activate    macOS/Linux: source .venv/bin/activate
+pip install -r requirements.txt
+```
+
+Salin `.env.example` menjadi `.env`, lalu isi `ANTHROPIC_API_KEY` (dapatkan di
+[console.anthropic.com](https://console.anthropic.com)).
+
+> Linux: pasang juga `sudo apt install python3-tk` jika belum ada (butuh PulseAudio atau PipeWire).
+
+## Pemakaian
+
+```bash
+python -m meeting_notes
+```
+
+1. Widget muncul dan selalu tampil di atas jendela lain.
+2. Klik **● Mulai Catat** saat rapat dimulai.
+3. Klik **■ Selesai & Rangkum** saat rapat selesai. Tunggu proses transkripsi dan ringkasan.
+4. Klik **Buka folder notulen** untuk melihat file `.md` dan `.docx`.
+
+Sudah punya rekaman (misalnya dari HP)? Proses langsung:
+
+```bash
+python -m meeting_notes proses rekaman-rapat.m4a
+```
+
+> Saat pertama dijalankan, model Whisper (~500 MB untuk `small`) diunduh sekali. Setelah itu
+> transkripsi berjalan tanpa internet.
+
+## Isi notulen
+
+- Judul & ringkasan rapat
+- Peserta
+- Poin pembahasan
+- Keputusan
+- Action items (tugas, penanggung jawab, tenggat)
+- Pertanyaan terbuka
+- Transkrip lengkap dengan timestamp
+
+## Pengaturan (`.env`)
+
+| Variabel | Default | Keterangan |
+|---|---|---|
+| `ANTHROPIC_API_KEY` | – | Wajib untuk membuat ringkasan |
+| `WHISPER_MODEL` | `small` | `tiny`/`base` lebih cepat, `medium`/`large-v3` lebih akurat (butuh laptop lebih kuat) |
+| `MEETING_LANGUAGE` | `id` | Bahasa utama rapat. `id` tetap menangkap istilah Inggris; pakai `auto` jika rapat dominan Inggris |
+| `OUTPUT_DIR` | `~/MeetingNotes` | Folder notulen. Rekaman audio disimpan di subfolder `rekaman/` |
+| `CAPTURE_SYSTEM_AUDIO` | `true` | Rekam juga suara dari speaker/headphone |
+| `CLAUDE_MODEL` | `claude-opus-5-5` | Model Claude untuk merangkum |
+
+## Merekam suara peserta meeting online
+
+Kalau kamu pakai **speaker**, mikrofon biasanya sudah menangkap suara peserta lain. Kalau pakai
+**headphone**, suara mereka hanya bisa didapat dari audio sistem:
+
+- **Windows & Linux:** otomatis, karena `CAPTURE_SYSTEM_AUDIO=true` merekam audio speaker lalu menggabungkannya dengan mikrofon.
+- **macOS:** macOS tidak mengizinkan perekaman audio sistem secara langsung. Pasang
+  [BlackHole](https://github.com/ExistentialAudio/BlackHole), buat *Multi-Output Device* di
+  Audio MIDI Setup, lalu jadikan BlackHole sebagai input default.
+
+Pastikan semua peserta tahu rapat sedang direkam.
+
+## Pengembangan
+
+```bash
+pip install -r requirements-dev.txt
+pytest
+```
+
+Struktur kode:
+
+| File | Fungsi |
+|---|---|
+| `meeting_notes/widget.py` | Widget Tkinter (tombol, timer, level suara) |
+| `meeting_notes/recorder.py` | Rekam mikrofon + audio sistem, gabungkan jadi satu WAV |
+| `meeting_notes/transcriber.py` | Transkripsi lokal dengan faster-whisper |
+| `meeting_notes/summarizer.py` | Ringkasan terstruktur dengan Claude |
+| `meeting_notes/exporter.py` | Ekspor ke Markdown dan Word |
+| `meeting_notes/pipeline.py` | Menyatukan semua langkah |
+
+## Rencana berikutnya
+
+- Transkrip live selama rapat berlangsung
+- Identifikasi pembicara (siapa bicara apa)
+- Shortcut keyboard global untuk mulai/berhenti
+- Ekspor ke Notion / Google Docs
+- Bot yang bisa join otomatis ke Zoom/Meet/Teams

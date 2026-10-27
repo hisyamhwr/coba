@@ -1,0 +1,8 @@
+anthropic>=2.3.0
+faster-whisper>=1.2.1
+soundcard>=0.4.4
+soundfile>=0.12.1
+numpy>=1.26
+python-docx>=1.1
+python-dotenv>=1.0
+pydantic>=2.0
