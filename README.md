@@ -112,10 +112,44 @@ Kamu tidak perlu mengisi kamus apa pun. Setiap selesai rapat:
 
 `kamus.txt` adalah file teks biasa; boleh diedit manual bila ada istilah yang terus salah.
 
+## Transkripsi cloud (paling akurat untuk campuran Indonesia-Inggris)
+
+Whisper lokal gratis dan offline, tetapi untuk bicara cepat atau artikulasi kurang jelas, mesin
+cloud biasanya jauh lebih akurat. Pilihan yang didukung: **ElevenLabs Scribe v2**, **AssemblyAI
+Universal-3.5 Pro**, dan **Deepgram Nova-3** (masing-masing ±$0,2-0,3 per jam audio; semuanya
+punya kredit gratis untuk mencoba). Bonus: mesin cloud memberi label **Pembicara 1, 2, ...**
+
+### 1. Uji tanding di rekamanmu sendiri
+
+Isi API key yang ingin diuji di `.env` (`ELEVENLABS_API_KEY`, `ASSEMBLYAI_API_KEY`,
+`DEEPGRAM_API_KEY`), lalu:
+
+```bash
+python -m meeting_notes bandingkan ~/MeetingNotes/rekaman/<folder>/meeting.wav --mulai 60 --durasi 300
+```
+
+Potongan 5 menit (mulai menit ke-1) ditranskripsi oleh semua mesin yang punya API key plus
+Whisper lokal, lalu hasilnya terbuka berdampingan di browser. Dengarkan `potongan.wav` dan pilih
+kolom yang paling benar.
+
+### 2. Pakai pemenangnya
+
+```bash
+# di .env
+TRANSCRIPTION_ENGINE=elevenlabs   # atau assemblyai / deepgram / lokal
+```
+
+Kamus otomatis ikut dikirim sebagai daftar istilah. Jika mesin cloud gagal (mis. internet
+putus), aplikasi otomatis kembali ke Whisper lokal dan mencatatnya di notulen.
+
+> Dengan mesin cloud, audio rapat dikirim ke server penyedia tersebut.
+
 ## Pengaturan (`.env`)
 
 | Variabel | Default | Keterangan |
 |---|---|---|
+| `TRANSCRIPTION_ENGINE` | `lokal` | `lokal` (Whisper), `elevenlabs`, `assemblyai`, atau `deepgram` |
+| `ELEVENLABS_API_KEY` / `ASSEMBLYAI_API_KEY` / `DEEPGRAM_API_KEY` | – | API key mesin cloud |
 | `SUMMARIZER` | `auto` | `auto`, `claude-code` (langganan Pro/Max), `api` (berbayar), atau `none` (transkrip saja) |
 | `CLAUDE_CODE_MODEL` | – | Model untuk mode `claude-code`, mis. `sonnet` atau `opus`. Kosong = default akunmu |
 | `ANTHROPIC_API_KEY` | – | Hanya untuk mode `api` |
@@ -152,14 +186,13 @@ Struktur kode:
 | `meeting_notes/widget.py` | Widget Tkinter (tombol, timer, level suara) |
 | `meeting_notes/recorder.py` | Rekam mikrofon + audio sistem, gabungkan jadi satu WAV |
 | `meeting_notes/transcriber.py` | Transkripsi lokal (mlx-whisper / faster-whisper), dipotong per 10 menit |
+| `meeting_notes/cloud_stt.py` | Transkripsi cloud (ElevenLabs, AssemblyAI, Deepgram) |
+| `meeting_notes/compare.py` | Uji tanding mesin transkripsi (`bandingkan`) |
+| `meeting_notes/glossary.py` | Kamus otomatis dan penerapan koreksi |
 | `meeting_notes/summarizer.py` | Ringkasan terstruktur lewat Claude Code (langganan) atau Claude API |
 | `meeting_notes/exporter.py` | Ekspor ke Markdown dan Word |
 | `meeting_notes/pipeline.py` | Menyatukan semua langkah |
 
 ## Rencana berikutnya
 
-- Transkrip live selama rapat berlangsung
-- Identifikasi pembicara (siapa bicara apa)
-- Shortcut keyboard global untuk mulai/berhenti
-- Ekspor ke Notion / Google Docs
-- Bot yang bisa join otomatis ke Zoom/Meet/Teams
+Lihat [docs/ROADMAP.md](docs/ROADMAP.md) dan [CHANGELOG.md](CHANGELOG.md).

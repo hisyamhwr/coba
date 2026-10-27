@@ -52,6 +52,8 @@ class Segment:
     start: float
     end: float
     text: str
+    # Label pembicara dari mesin cloud (mis. "speaker_0"); Whisper lokal tidak mengisinya.
+    speaker: str | None = None
 
 
 def format_timestamp(seconds: float) -> str:
@@ -62,7 +64,18 @@ def format_timestamp(seconds: float) -> str:
 
 
 def segments_to_text(segments: list[Segment]) -> str:
-    return "\n".join(f"[{format_timestamp(s.start)}] {s.text}" for s in segments)
+    return "\n".join(
+        f"[{format_timestamp(s.start)}] {s.speaker + ': ' if s.speaker else ''}{s.text}" for s in segments
+    )
+
+
+def label_speakers(segments: list[Segment]) -> list[Segment]:
+    """Ganti label mentah mesin cloud (speaker_0, speaker_A, ...) menjadi Pembicara 1, 2, ... sesuai urutan muncul."""
+    names: dict[str, str] = {}
+    for s in segments:
+        if s.speaker and s.speaker not in names:
+            names[s.speaker] = f"Pembicara {len(names) + 1}"
+    return [Segment(s.start, s.end, s.text, names.get(s.speaker) if s.speaker else None) for s in segments]
 
 
 def to_paragraphs(segments: list[Segment], max_gap: float = 2.0, max_chars: int = 700) -> list[Segment]:
@@ -70,10 +83,11 @@ def to_paragraphs(segments: list[Segment], max_gap: float = 2.0, max_chars: int 
     paragraphs: list[Segment] = []
     for seg in segments:
         last = paragraphs[-1] if paragraphs else None
-        if last and seg.start - last.end <= max_gap and len(last.text) + len(seg.text) < max_chars:
-            paragraphs[-1] = Segment(last.start, seg.end, f"{last.text} {seg.text}")
+        same_speaker = last is not None and last.speaker == seg.speaker
+        if last and same_speaker and seg.start - last.end <= max_gap and len(last.text) + len(seg.text) < max_chars:
+            paragraphs[-1] = Segment(last.start, seg.end, f"{last.text} {seg.text}", seg.speaker)
         else:
-            paragraphs.append(Segment(seg.start, seg.end, seg.text))
+            paragraphs.append(seg)
     return paragraphs
 
 
@@ -94,7 +108,7 @@ def clean_segments(segments: list[Segment]) -> list[Segment]:
     """Buang halusinasi Whisper dan baris yang terulang beruntun."""
     result: list[Segment] = []
     for seg in segments:
-        seg = Segment(seg.start, seg.end, collapse_repeats(seg.text).strip())
+        seg = Segment(seg.start, seg.end, collapse_repeats(seg.text).strip(), seg.speaker)
         norm = _normalize(seg.text)
         if not norm:
             continue

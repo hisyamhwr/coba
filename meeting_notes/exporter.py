@@ -69,7 +69,8 @@ def render_markdown(
 
     lines += ["---", "", "## Lampiran: Transkrip Lengkap", ""]
     for p in paragraphs:
-        lines += [f"**[{format_timestamp(p.start)}]** {p.text}", ""]
+        speaker = f" {p.speaker}:" if p.speaker else ""
+        lines += [f"**[{format_timestamp(p.start)}]{speaker}** {p.text}", ""]
     if not paragraphs:
         lines += ["_(tidak ada suara terdeteksi)_", ""]
     if corrections:
@@ -131,7 +132,8 @@ def write_docx(
     doc.add_heading("Lampiran: Transkrip Lengkap", level=1)
     for p in paragraphs:
         para = doc.add_paragraph()
-        para.add_run(f"[{format_timestamp(p.start)}] ").bold = True
+        speaker = f" {p.speaker}:" if p.speaker else ""
+        para.add_run(f"[{format_timestamp(p.start)}]{speaker} ").bold = True
         para.add_run(p.text)
     if not paragraphs:
         doc.add_paragraph("(tidak ada suara terdeteksi)")

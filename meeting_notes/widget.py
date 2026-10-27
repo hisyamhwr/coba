@@ -69,7 +69,8 @@ class MeetingWidget:
 
         self.root.protocol("WM_DELETE_WINDOW", self.on_close)
         # Unduh model Whisper di latar belakang (sekali saja) supaya tidak menunggu saat rapat selesai.
-        threading.Thread(target=self._download_model, daemon=True).start()
+        if settings.transcription_engine == "lokal":
+            threading.Thread(target=self._download_model, daemon=True).start()
         self.root.after(100, self._tick)
 
     def _download_model(self) -> None:
@@ -130,9 +131,11 @@ class MeetingWidget:
             if kind == "status":
                 self.set_status(str(payload))
             elif kind == "download_failed":
-                # Jangan menimpa status rekaman: rekaman tetap berjalan, model diunduh ulang saat diproses.
-                prefix = "Mendengarkan rapat... " if self.state == "recording" else ""
-                self.set_status(f"{prefix}(Model Whisper belum terunduh, cek internet. Akan dicoba lagi.)")
+                # Jangan menimpa status rekaman, proses, atau hasil: model diunduh ulang saat diproses.
+                if self.state == "recording":
+                    self.set_status("Mendengarkan rapat... (Model Whisper belum terunduh, akan dicoba lagi.)")
+                elif self.state == "idle" and not self.open_button.winfo_ismapped():
+                    self.set_status("Model Whisper belum terunduh, cek internet. Akan dicoba lagi.")
             elif kind == "done":
                 self.last_result_dir = payload.markdown_path.parent
                 note = f"\n{payload.note}" if payload.note else ""

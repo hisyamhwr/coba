@@ -48,6 +48,8 @@ topik; gabungkan obrolan kecil ke topik terdekat dan abaikan basa-basi.
 kalimat umum seperti "tim berdiskusi tentang progres".
 - Keputusan hanya yang benar-benar disepakati, bukan sekadar usulan. Penugasan seseorang \
 ("Rina tolong buat ...") adalah action item, bukan keputusan; jangan ditulis di keduanya.
+- Transkrip bisa berlabel "Pembicara 1", "Pembicara 2", dst. Jika nama asli pembicara jelas dari \
+percakapan (mis. dipanggil namanya lalu menjawab), pakai nama itu di MoM; jika tidak, pakai labelnya.
 - Peserta hanya orang yang hadir atau berbicara. Orang yang sekadar disebut namanya \
 (mis. atasan yang dimintai persetujuan) jangan dimasukkan sebagai peserta.
 

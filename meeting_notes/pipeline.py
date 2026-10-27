@@ -1,16 +1,30 @@
 """Alur lengkap: audio -> transkrip -> koreksi & ringkasan -> file .md dan .docx."""
 
 import re
+import tempfile
 from collections.abc import Callable
 from dataclasses import dataclass
 from datetime import datetime
 from pathlib import Path
 
+import numpy as np
+import soundfile as sf
+
+from .cloud_stt import PROVIDERS, transcribe_with_fallback
 from .config import Settings
 from .exporter import MeetingInfo, render_markdown, write_docx
 from .glossary import Glossary, apply_corrections
 from .summarizer import make_summarizer
-from .transcriber import SAMPLE_RATE, Segment, Transcriber, load_audio, segments_to_text, to_paragraphs
+from .transcriber import (
+    SAMPLE_RATE,
+    Segment,
+    Transcriber,
+    clean_segments,
+    label_speakers,
+    load_audio,
+    segments_to_text,
+    to_paragraphs,
+)
 
 
 @dataclass
@@ -22,6 +36,36 @@ class NotesResult:
 
 def _slug(text: str) -> str:
     return re.sub(r"[^\w]+", "-", text.lower()).strip("-")[:50] or "rapat"
+
+
+def transcribe(
+    audio: np.ndarray, settings: Settings, glossary: Glossary, transcriber: Transcriber | None,
+    on_status: Callable[[str], None],
+) -> tuple[list[Segment], str | None]:
+    """Transkripsi dengan mesin pilihan; jika mesin cloud tidak tersedia/gagal, kembali ke Whisper lokal."""
+    note = None
+    engine = settings.transcription_engine
+    if engine != "lokal":
+        provider = PROVIDERS[engine]() if engine in PROVIDERS else None
+        if provider is None:
+            note = f"TRANSCRIPTION_ENGINE '{engine}' tidak dikenal, memakai Whisper lokal."
+        elif not provider.api_key:
+            note = f"{provider.env_key} belum diisi, memakai Whisper lokal."
+        else:
+            on_status(f"Mentranskrip via {provider.name}...")
+            try:
+                with tempfile.TemporaryDirectory() as tmp:
+                    # FLAC: tanpa kehilangan kualitas tapi ukurannya +-separuh WAV, jadi unggahan lebih cepat.
+                    path = Path(tmp) / "rapat.flac"
+                    sf.write(path, audio, SAMPLE_RATE, format="FLAC")
+                    return clean_segments(transcribe_with_fallback(provider, path, glossary.terms)), None
+            except Exception as exc:  # noqa: BLE001 - rapat tetap tercatat dengan Whisper lokal
+                note = f"{provider.name} gagal ({str(exc)[:150]}), memakai Whisper lokal."
+
+    on_status("Mentranskrip audio (lokal)...")
+    transcriber = transcriber or Transcriber(settings.whisper_model, settings.language, settings.whisper_engine)
+    transcriber.vocabulary = glossary.whisper_hint()
+    return transcriber.transcribe(audio, lambda p: on_status(f"Mentranskrip... {p:.0%}")), note
 
 
 def process_recording(
@@ -36,11 +80,8 @@ def process_recording(
     audio = load_audio(audio_path)
     info = MeetingInfo(started_at=started_at, duration_seconds=len(audio) / SAMPLE_RATE)
 
-    on_status("Mentranskrip audio (lokal)...")
-    transcriber = transcriber or Transcriber(settings.whisper_model, settings.language, settings.whisper_engine)
-    transcriber.vocabulary = glossary.whisper_hint()
-    segments = transcriber.transcribe(audio, lambda p: on_status(f"Mentranskrip... {p:.0%}"))
-    paragraphs = to_paragraphs(segments)
+    segments, engine_note = transcribe(audio, settings, glossary, transcriber, on_status)
+    paragraphs = to_paragraphs(label_speakers(segments))
 
     summary, note, corrections = None, None, {}
     summarizer, unavailable_reason = make_summarizer(settings) if segments else (None, None)
@@ -60,13 +101,14 @@ def process_recording(
         fixed = []
         for p in paragraphs:
             text, counts = apply_corrections(p.text, pairs)
-            fixed.append(Segment(p.start, p.end, text))
+            fixed.append(Segment(p.start, p.end, text, p.speaker))
             for key, n in counts.items():
                 corrections[key] = corrections.get(key, 0) + n
         paragraphs = fixed
         glossary.merge(summary.glossary_terms)
         glossary.save()
 
+    note = " ".join(n for n in (engine_note, note) if n) or None
     settings.output_dir.mkdir(parents=True, exist_ok=True)
     base = f"{started_at:%Y-%m-%d_%H%M}_{_slug(summary.title if summary else 'rapat')}"
     md_path = settings.output_dir / f"{base}.md"

@@ -18,10 +18,11 @@ Target: aplikasi pencatat rapat ala Fireflies yang berjalan langsung di Mac, tan
 | 1.0.2 | MoM per agenda, transkrip jadi paragraf, transkrip lengkap dipindah ke lampiran, Whisper large-v3-turbo (MLX di Mac) | ✅ Selesai |
 | 1.1.0 | Koreksi transkrip oleh Claude dan kamus istilah yang belajar sendiri | ✅ Selesai |
 | 1.1.1 | Perbaikan hasil QA server (widget dan kualitas MoM) | ✅ Selesai |
-| 1.1.2 | Perbaikan QA Mac: pengulangan kata saat diam, koreksi "setor tunai" | ✅ Selesai, lanjut QA di Mac ([QA.md](QA.md)) |
+| 1.1.2 | Perbaikan QA Mac: pengulangan kata saat diam, koreksi "setor tunai" | ✅ Selesai |
+| 1.2.0 | Mesin transkripsi cloud (ElevenLabs/AssemblyAI/Deepgram), label pembicara, uji tanding `bandingkan` | ✅ Selesai, menunggu uji tanding di Mac ([QA.md](QA.md)) |
 | 2.0.0 | Aplikasi Mac native: UI notch ala Dynamic Island, rekam audio Zoom/Meet/Teams langsung, transkrip live, tombol tandai penting, MoM otomatis | |
 | 2.1.0 | Perpustakaan rapat, pencarian, dan "Tanya ke rapat" | |
-| 2.2.0 | Label pembicara (siapa bicara apa) | |
+| 2.2.0 | Label pembicara (siapa bicara apa) | Sebagian sudah ada lewat mesin cloud di 1.2.0 |
 
 Referensi UI untuk 2.0.0 ada di [`design-references/`](design-references/).
 
