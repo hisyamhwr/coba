@@ -12,16 +12,33 @@ from meeting_notes.exporter import MeetingInfo, render_markdown, write_docx
 from meeting_notes.pipeline import process_recording
 from meeting_notes.recorder import mix_tracks
 from meeting_notes import summarizer as summarizer_module
-from meeting_notes.summarizer import ActionItem, ClaudeCodeSummarizer, MeetingSummary, Summarizer, make_summarizer
-from meeting_notes.transcriber import Segment, format_timestamp
+from meeting_notes.summarizer import (
+    ActionItem,
+    AgendaItem,
+    ClaudeCodeSummarizer,
+    MeetingSummary,
+    Summarizer,
+    make_summarizer,
+)
+from meeting_notes.transcriber import (
+    Segment,
+    Transcriber,
+    chunk_bounds,
+    clean_segments,
+    format_timestamp,
+    to_paragraphs,
+)
 
 SEGMENTS = [Segment(0, 4, "Oke kita mulai meeting-nya."), Segment(65, 70, "Budi follow up ke vendor Jumat.")]
 SUMMARY = MeetingSummary(
     title="Sinkronisasi Vendor",
-    summary="Tim membahas progres vendor.",
+    executive_summary="Tim membahas progres vendor.",
     participants=["Budi", "Sari"],
-    key_points=["Progres vendor terlambat"],
-    decisions=["Ganti jadwal rilis"],
+    agenda=[
+        AgendaItem(topic="Progres vendor", start_time="00:00", points=["Vendor terlambat 2 minggu"],
+                   decisions=["Ganti jadwal rilis"]),
+        AgendaItem(topic="Budget", start_time="01:05", points=["Budget belum disetujui"], decisions=[]),
+    ],
     action_items=[ActionItem(task="Follow up ke vendor", owner="Budi", deadline="Jumat")],
     open_questions=[],
 )
@@ -37,8 +54,14 @@ def test_render_markdown_with_summary():
     md = render_markdown(INFO, SEGMENTS, SUMMARY)
     assert md.startswith("# Sinkronisasi Vendor")
     assert "**Durasi:** 01:02:05" in md
-    assert "| Follow up ke vendor | Budi | Jumat |" in md
+    assert "**Peserta:** Budi, Sari" in md
+    assert "## Keputusan Utama\n\n- Ganti jadwal rilis" in md
+    assert "| 1 | Follow up ke vendor | Budi | Jumat |" in md
+    assert "### 1. Progres vendor `00:00`" in md
+    assert "### 2. Budget `01:05`" in md
     assert "## Pertanyaan Terbuka\n\n- -" in md
+    # Ringkasan di atas, transkrip lengkap di lampiran paling bawah.
+    assert md.index("## Ringkasan Eksekutif") < md.index("## Lampiran: Transkrip Lengkap")
     assert "**[01:05]** Budi follow up ke vendor Jumat." in md
 
 
@@ -53,8 +76,10 @@ def test_write_docx(tmp_path):
     path = write_docx(tmp_path / "notes.docx", INFO, SEGMENTS, SUMMARY)
     doc = Document(path)
     text = "\n".join(p.text for p in doc.paragraphs)
-    assert "Sinkronisasi Vendor" in text and "Transkrip Lengkap" in text
-    assert [c.text for c in doc.tables[0].rows[1].cells] == ["Follow up ke vendor", "Budi", "Jumat"]
+    assert "Sinkronisasi Vendor" in text and "Lampiran: Transkrip Lengkap" in text
+    assert "1. Progres vendor (00:00)" in text
+    assert [c.text for c in doc.tables[0].rows[1].cells] == ["1", "Follow up ke vendor", "Budi", "Jumat"]
+    assert "Meeting Notes v" in doc.sections[0].footer.paragraphs[0].text
 
 
 def test_mix_tracks_handles_different_lengths(tmp_path):
@@ -68,8 +93,59 @@ def test_mix_tracks_handles_different_lengths(tmp_path):
     assert np.allclose(data[sr // 2 :], 0.25, atol=1e-3)
 
 
+def test_to_paragraphs_merges_short_segments():
+    segs = [Segment(0, 2, "Oke"), Segment(2.5, 4, "kita mulai."), Segment(10, 12, "Topik berikutnya.")]
+    assert to_paragraphs(segs) == [Segment(0, 4, "Oke kita mulai."), Segment(10, 12, "Topik berikutnya.")]
+    long = [Segment(i, i + 1, "x" * 300) for i in range(4)]
+    assert len(to_paragraphs(long)) == 2
+
+
+def test_clean_segments_drops_hallucinations_and_repeats():
+    segs = [
+        Segment(0, 1, "Halo semua."),
+        Segment(1, 2, "Terima kasih telah menonton!"),
+        Segment(2, 3, "Kita bahas budget."),
+        Segment(3, 4, "Kita bahas budget."),
+        Segment(4, 5, "..."),
+    ]
+    assert [s.text for s in clean_segments(segs)] == ["Halo semua.", "Kita bahas budget."]
+
+
+def test_chunk_bounds_cut_at_quietest_point():
+    sr = 100
+    audio = np.ones(sr * 25, dtype="float32")
+    audio[int(sr * 8.5): int(sr * 8.7)] = 0  # jeda sunyi sebelum batas 10 detik
+    bounds = chunk_bounds(audio, sr=sr, chunk_seconds=10, search_seconds=3)
+    assert bounds[0][0] == 0 and bounds[-1][1] == len(audio)
+    assert 850 <= bounds[0][1] <= 870
+    assert all(a[1] == b[0] for a, b in zip(bounds, bounds[1:], strict=False))
+
+
+class FakeEngine:
+    def __init__(self):
+        self.calls = 0
+
+    def transcribe(self, audio, prompt):
+        self.calls += 1
+        return [Segment(0.5, 1.0, f"potongan {self.calls}")]
+
+
+def test_transcriber_offsets_chunks_and_skips_silence():
+    transcriber = Transcriber(engine="faster-whisper", chunk_seconds=2)
+    transcriber.engine = FakeEngine()
+    audio = np.concatenate([np.full(32000, 0.1), np.zeros(32000), np.full(16000, 0.1)]).astype("float32")
+    progress = []
+    segments = transcriber.transcribe(audio, progress.append)
+    # Potongan: [0-1.05s] [1.05-2.1s] [2.1-3.15s sunyi, dilewati] [3.15-5s]
+    assert transcriber.engine.calls == 3
+    assert [s.text for s in segments] == ["potongan 1", "potongan 2", "potongan 3"]
+    assert segments[0].start == 0.5
+    assert segments[-1].start == 50400 / 16000 + 0.5
+    assert progress[-1] == 1.0
+
+
 class FakeTranscriber:
-    def transcribe(self, audio_path, on_progress=None):
+    def transcribe(self, audio, on_progress=None):
         return SEGMENTS
 
 

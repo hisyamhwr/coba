@@ -18,8 +18,11 @@ def _env_bool(name: str, default: bool) -> bool:
 
 @dataclass
 class Settings:
-    # Whisper: tiny, base, small, medium, large-v3. "small" seimbang antara akurasi dan kecepatan di CPU.
-    whisper_model: str = field(default_factory=lambda: os.getenv("WHISPER_MODEL", "small"))
+    # Whisper: tiny, base, small, medium, large-v3, large-v3-turbo.
+    # "large-v3-turbo" hampir seakurat large-v3 tetapi jauh lebih ringan (+-1,6 GB), cocok untuk RAM 8 GB.
+    whisper_model: str = field(default_factory=lambda: os.getenv("WHISPER_MODEL", "large-v3-turbo"))
+    # auto: mlx-whisper di Mac Apple Silicon, faster-whisper di perangkat lain. Pilihan: mlx, faster-whisper.
+    whisper_engine: str = field(default_factory=lambda: os.getenv("WHISPER_ENGINE", "auto").strip().lower())
     # Bahasa utama rapat. "id" tetap menangkap istilah Inggris dengan baik; "auto" untuk deteksi otomatis.
     language: str | None = field(
         default_factory=lambda: None

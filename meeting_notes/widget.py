@@ -9,6 +9,7 @@ import tkinter as tk
 from datetime import datetime
 from pathlib import Path
 
+from . import __version__
 from .config import Settings
 from .pipeline import process_recording
 from .recorder import Recorder
@@ -33,7 +34,7 @@ def open_path(path: Path) -> None:
 class MeetingWidget:
     def __init__(self, settings: Settings):
         self.settings = settings
-        self.transcriber = Transcriber(settings.whisper_model, settings.language)
+        self.transcriber = Transcriber(settings.whisper_model, settings.language, settings.whisper_engine)
         self.recorder: Recorder | None = None
         self.started_at: datetime | None = None
         self.last_result_dir: Path | None = None
@@ -41,7 +42,7 @@ class MeetingWidget:
         self.state = "idle"
 
         self.root = tk.Tk()
-        self.root.title("Meeting Notes")
+        self.root.title(f"Meeting Notes v{__version__}")
         self.root.configure(bg=BG, padx=14, pady=12)
         self.root.attributes("-topmost", True)
         self.root.resizable(False, False)
@@ -67,15 +68,15 @@ class MeetingWidget:
         )
 
         self.root.protocol("WM_DELETE_WINDOW", self.on_close)
-        # Muat model Whisper di latar belakang supaya siap saat rapat selesai.
-        threading.Thread(target=self._preload_model, daemon=True).start()
+        # Unduh model Whisper di latar belakang (sekali saja) supaya tidak menunggu saat rapat selesai.
+        threading.Thread(target=self._download_model, daemon=True).start()
         self.root.after(100, self._tick)
 
-    def _preload_model(self) -> None:
+    def _download_model(self) -> None:
         try:
-            self.transcriber._load()
+            self.transcriber.download()
         except Exception as exc:  # noqa: BLE001
-            self.events.put(("status", f"Gagal memuat model Whisper: {exc}"))
+            self.events.put(("status", f"Gagal mengunduh model Whisper: {exc}"))
 
     def toggle(self) -> None:
         if self.state == "idle":

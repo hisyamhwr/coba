@@ -22,6 +22,14 @@ Kamu adalah notulen rapat yang teliti. Kamu menerima transkrip otomatis sebuah r
 bahasanya campuran Indonesia dan Inggris. Transkrip bisa mengandung salah dengar, jadi pahami \
 maksudnya dari konteks.
 
+Susun Minutes of Meeting (MoM) yang langsung ke inti:
+- Ringkasan eksekutif 3-5 kalimat: apa tujuan rapat, apa hasilnya.
+- Kelompokkan pembahasan per agenda/topik sesuai urutan waktu. Rapat panjang biasanya 3-10 \
+topik; gabungkan obrolan kecil ke topik terdekat dan abaikan basa-basi.
+- Poin pembahasan harus konkret: sebutkan angka, nama, tanggal, dan alasan bila ada. Hindari \
+kalimat umum seperti "tim berdiskusi tentang progres".
+- Keputusan hanya yang benar-benar disepakati, bukan sekadar usulan.
+
 Tulis seluruh hasil dalam Bahasa Indonesia yang jelas dan ringkas. Istilah teknis atau nama \
 produk berbahasa Inggris boleh dipertahankan. Jangan mengarang informasi yang tidak ada di \
 transkrip: jika penanggung jawab atau tenggat tidak disebutkan, isi dengan "-".\
@@ -34,14 +42,24 @@ class ActionItem(BaseModel):
     deadline: str = Field(description="Tenggat waktu, atau '-' jika tidak disebutkan")
 
 
+class AgendaItem(BaseModel):
+    topic: str = Field(description="Nama topik/agenda yang dibahas")
+    start_time: str = Field(description="Timestamp transkrip saat topik mulai dibahas, mis. 05:30 atau 01:05:30")
+    points: list[str] = Field(description="Poin pembahasan yang konkret")
+    decisions: list[str] = Field(description="Keputusan yang disepakati dalam topik ini")
+
+
 class MeetingSummary(BaseModel):
     title: str = Field(description="Judul singkat rapat berdasarkan topik utamanya")
-    summary: str = Field(description="Ringkasan rapat dalam 1-2 paragraf")
+    executive_summary: str = Field(description="Ringkasan eksekutif 3-5 kalimat")
     participants: list[str] = Field(description="Nama peserta yang disebut di transkrip")
-    key_points: list[str] = Field(description="Poin-poin utama yang dibahas")
-    decisions: list[str] = Field(description="Keputusan yang disepakati")
+    agenda: list[AgendaItem] = Field(description="Pembahasan per agenda, urut sesuai waktu")
     action_items: list[ActionItem] = Field(description="Tindak lanjut")
     open_questions: list[str] = Field(description="Pertanyaan atau isu yang belum terjawab")
+
+    @property
+    def decisions(self) -> list[str]:
+        return [d for item in self.agenda for d in item.decisions]
 
 
 class Summarizer:
@@ -73,7 +91,7 @@ def _wrap_transcript(transcript: str) -> str:
 
 
 class ClaudeCodeSummarizer:
-    def __init__(self, executable: str, model: str | None = None, timeout: int = 900):
+    def __init__(self, executable: str, model: str | None = None, timeout: int = 1800):
         self.executable = executable
         self.model = model
         self.timeout = timeout

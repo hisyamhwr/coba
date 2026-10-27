@@ -22,7 +22,7 @@ join ke meeting, karena ia merekam langsung dari mikrofon dan speaker laptopmu.
 Mikrofon + audio speaker ──► rekaman WAV (lokal)
                                │
                                ▼
-                    Whisper (faster-whisper, lokal) ──► transkrip
+          Whisper large-v3-turbo (lokal, MLX di Mac M1) ──► transkrip
                                │
                                ▼
           Claude (langganan Pro/Max atau API) ──► ringkasan Bahasa Indonesia
@@ -86,18 +86,18 @@ Sudah punya rekaman (misalnya dari HP)? Proses langsung:
 python -m meeting_notes proses rekaman-rapat.m4a
 ```
 
-> Saat pertama dijalankan, model Whisper (~500 MB untuk `small`) diunduh sekali. Setelah itu
+> Saat pertama dijalankan, model Whisper (~1,6 GB untuk `large-v3-turbo`) diunduh sekali di latar belakang. Setelah itu
 > transkripsi berjalan tanpa internet.
 
 ## Isi notulen
 
-- Judul & ringkasan rapat
-- Peserta
-- Poin pembahasan
-- Keputusan
-- Action items (tugas, penanggung jawab, tenggat)
-- Pertanyaan terbuka
-- Transkrip lengkap dengan timestamp
+1. Judul, tanggal, durasi, peserta
+2. Ringkasan eksekutif (3-5 kalimat)
+3. Keputusan utama
+4. Action items (tugas, penanggung jawab, tenggat)
+5. Pembahasan per agenda, lengkap dengan waktu mulai tiap topik
+6. Pertanyaan terbuka
+7. Lampiran: transkrip lengkap, dirapikan menjadi paragraf
 
 ## Pengaturan (`.env`)
 
@@ -106,7 +106,8 @@ python -m meeting_notes proses rekaman-rapat.m4a
 | `SUMMARIZER` | `auto` | `auto`, `claude-code` (langganan Pro/Max), `api` (berbayar), atau `none` (transkrip saja) |
 | `CLAUDE_CODE_MODEL` | – | Model untuk mode `claude-code`, mis. `sonnet` atau `opus`. Kosong = default akunmu |
 | `ANTHROPIC_API_KEY` | – | Hanya untuk mode `api` |
-| `WHISPER_MODEL` | `small` | `tiny`/`base` lebih cepat, `medium`/`large-v3` lebih akurat (butuh laptop lebih kuat) |
+| `WHISPER_MODEL` | `large-v3-turbo` | `small` lebih cepat tapi kurang akurat; `large-v3` sedikit lebih akurat tapi berat untuk RAM 8 GB |
+| `WHISPER_ENGINE` | `auto` | `mlx` (Mac M1/M2/...), `faster-whisper` (Windows/Linux/Mac Intel) |
 | `MEETING_LANGUAGE` | `id` | Bahasa utama rapat. `id` tetap menangkap istilah Inggris; pakai `auto` jika rapat dominan Inggris |
 | `OUTPUT_DIR` | `~/MeetingNotes` | Folder notulen. Rekaman audio disimpan di subfolder `rekaman/` |
 | `CAPTURE_SYSTEM_AUDIO` | `true` | Rekam juga suara dari speaker/headphone |
@@ -137,7 +138,7 @@ Struktur kode:
 |---|---|
 | `meeting_notes/widget.py` | Widget Tkinter (tombol, timer, level suara) |
 | `meeting_notes/recorder.py` | Rekam mikrofon + audio sistem, gabungkan jadi satu WAV |
-| `meeting_notes/transcriber.py` | Transkripsi lokal dengan faster-whisper |
+| `meeting_notes/transcriber.py` | Transkripsi lokal (mlx-whisper / faster-whisper), dipotong per 10 menit |
 | `meeting_notes/summarizer.py` | Ringkasan terstruktur lewat Claude Code (langganan) atau Claude API |
 | `meeting_notes/exporter.py` | Ekspor ke Markdown dan Word |
 | `meeting_notes/pipeline.py` | Menyatukan semua langkah |
