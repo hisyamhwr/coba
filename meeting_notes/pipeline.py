@@ -1,6 +1,5 @@
 """Alur lengkap: audio -> transkrip -> ringkasan -> file .md dan .docx."""
 
-import os
 import re
 from collections.abc import Callable
 from dataclasses import dataclass
@@ -11,7 +10,7 @@ import soundfile as sf
 
 from .config import Settings
 from .exporter import MeetingInfo, render_markdown, write_docx
-from .summarizer import Summarizer
+from .summarizer import make_summarizer
 from .transcriber import Transcriber, segments_to_text
 
 
@@ -41,14 +40,15 @@ def process_recording(
     segments = transcriber.transcribe(audio_path, lambda p: on_status(f"Mentranskrip... {p:.0%}"))
 
     summary, note = None, None
+    summarizer, unavailable_reason = make_summarizer(settings) if segments else (None, None)
     if not segments:
         note = "Tidak ada suara yang terdeteksi dalam rekaman."
-    elif not (os.getenv("ANTHROPIC_API_KEY") or os.getenv("ANTHROPIC_AUTH_TOKEN")):
-        note = "ANTHROPIC_API_KEY belum diatur, jadi hanya transkrip yang disimpan (tanpa ringkasan)."
+    elif summarizer is None:
+        note = unavailable_reason
     else:
         on_status("Membuat ringkasan...")
         try:
-            summary = Summarizer(settings.claude_model).summarize(segments_to_text(segments))
+            summary = summarizer.summarize(segments_to_text(segments))
         except Exception as exc:  # noqa: BLE001 - transkrip tetap disimpan walau ringkasan gagal
             note = f"Ringkasan gagal dibuat ({exc}). Transkrip tetap disimpan."
 

@@ -26,7 +26,12 @@ class Settings:
         if os.getenv("MEETING_LANGUAGE", "id") == "auto"
         else os.getenv("MEETING_LANGUAGE", "id")
     )
+    # auto: pakai Claude API jika ANTHROPIC_API_KEY ada, selain itu Claude Code (langganan Pro/Max).
+    # Pilihan lain: api, claude-code, none.
+    summarizer: str = field(default_factory=lambda: os.getenv("SUMMARIZER", "auto").strip().lower())
     claude_model: str = field(default_factory=lambda: os.getenv("CLAUDE_MODEL", "claude-opus-5-5"))
+    # Model untuk mode Claude Code, mis. "sonnet" atau "opus". Kosong = default akunmu.
+    claude_code_model: str | None = field(default_factory=lambda: os.getenv("CLAUDE_CODE_MODEL") or None)
     output_dir: Path = field(
         default_factory=lambda: Path(os.getenv("OUTPUT_DIR", "~/MeetingNotes")).expanduser()
     )

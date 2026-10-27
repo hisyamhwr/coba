@@ -1,7 +1,9 @@
+import json
 from datetime import datetime
 from types import SimpleNamespace
 
 import numpy as np
+import pytest
 import soundfile as sf
 from docx import Document
 
@@ -9,7 +11,8 @@ from meeting_notes.config import Settings
 from meeting_notes.exporter import MeetingInfo, render_markdown, write_docx
 from meeting_notes.pipeline import process_recording
 from meeting_notes.recorder import mix_tracks
-from meeting_notes.summarizer import ActionItem, MeetingSummary, Summarizer
+from meeting_notes import summarizer as summarizer_module
+from meeting_notes.summarizer import ActionItem, ClaudeCodeSummarizer, MeetingSummary, Summarizer, make_summarizer
 from meeting_notes.transcriber import Segment, format_timestamp
 
 SEGMENTS = [Segment(0, 4, "Oke kita mulai meeting-nya."), Segment(65, 70, "Budi follow up ke vendor Jumat.")]
@@ -76,14 +79,62 @@ def _audio(tmp_path):
     return path
 
 
-def test_pipeline_without_api_key_saves_transcript(tmp_path, monkeypatch):
+def _no_api_key(monkeypatch):
     monkeypatch.delenv("ANTHROPIC_API_KEY", raising=False)
     monkeypatch.delenv("ANTHROPIC_AUTH_TOKEN", raising=False)
+
+
+def test_pipeline_without_any_summarizer_saves_transcript(tmp_path, monkeypatch):
+    _no_api_key(monkeypatch)
+    monkeypatch.setattr(summarizer_module, "find_claude_cli", lambda: None)
     settings = Settings(output_dir=tmp_path / "out")
     result = process_recording(_audio(tmp_path), settings, INFO.started_at, lambda _: None, FakeTranscriber())
     assert result.markdown_path.name == "2026-10-27_0930_rapat.md"
     assert result.docx_path.exists()
-    assert "ANTHROPIC_API_KEY" in result.note
+    assert "Claude Code belum terpasang" in result.note
+
+
+def test_make_summarizer_prefers_subscription_without_api_key(monkeypatch):
+    _no_api_key(monkeypatch)
+    monkeypatch.setattr(summarizer_module, "find_claude_cli", lambda: "/usr/bin/claude")
+    chosen, reason = make_summarizer(Settings(summarizer="auto"))
+    assert isinstance(chosen, ClaudeCodeSummarizer) and reason is None
+
+
+def test_make_summarizer_uses_api_when_key_set(monkeypatch):
+    monkeypatch.setenv("ANTHROPIC_API_KEY", "test")
+    monkeypatch.setattr(summarizer_module, "find_claude_cli", lambda: "/usr/bin/claude")
+    assert isinstance(make_summarizer(Settings(summarizer="auto"))[0], Summarizer)
+    assert isinstance(make_summarizer(Settings(summarizer="claude-code"))[0], ClaudeCodeSummarizer)
+    assert make_summarizer(Settings(summarizer="none"))[0] is None
+
+
+def test_claude_code_summarizer(monkeypatch):
+    monkeypatch.setenv("ANTHROPIC_API_KEY", "should-not-leak")
+    calls = {}
+
+    def fake_run(cmd, **kwargs):
+        calls.update(cmd=cmd, **kwargs)
+        out = {"is_error": False, "structured_output": SUMMARY.model_dump()}
+        return SimpleNamespace(returncode=0, stdout=json.dumps(out), stderr="")
+
+    monkeypatch.setattr(summarizer_module.subprocess, "run", fake_run)
+    result = ClaudeCodeSummarizer("claude", model="sonnet").summarize("[00:00] halo")
+    assert result == SUMMARY
+    assert calls["cmd"][:2] == ["claude", "-p"]
+    assert calls["cmd"][-2:] == ["--model", "sonnet"]
+    assert "ANTHROPIC_API_KEY" not in calls["env"]
+    assert calls["input"] == "<transkrip>\n[00:00] halo\n</transkrip>"
+
+
+def test_claude_code_summarizer_reports_login_error(monkeypatch):
+    out = {"is_error": True, "result": "Not logged in · Please run /login"}
+    monkeypatch.setattr(
+        summarizer_module.subprocess, "run",
+        lambda cmd, **kw: SimpleNamespace(returncode=1, stdout=json.dumps(out), stderr=""),
+    )
+    with pytest.raises(RuntimeError, match="Please run /login"):
+        ClaudeCodeSummarizer("claude").summarize("x")
 
 
 def test_pipeline_with_summary(tmp_path, monkeypatch):

@@ -25,7 +25,7 @@ Mikrofon + audio speaker ──► rekaman WAV (lokal)
                     Whisper (faster-whisper, lokal) ──► transkrip
                                │
                                ▼
-                    Claude API ──► ringkasan Bahasa Indonesia
+          Claude (langganan Pro/Max atau API) ──► ringkasan Bahasa Indonesia
                                │
                                ▼
                  ~/MeetingNotes/2026-10-27_0930_judul-rapat.md / .docx
@@ -33,7 +33,8 @@ Mikrofon + audio speaker ──► rekaman WAV (lokal)
 
 - **Audio tidak pernah keluar dari laptopmu.** Rekaman dan transkripsi diproses sepenuhnya di perangkat.
 - Yang dikirim ke Claude hanya **teks transkrip**, untuk dirangkum.
-- Tanpa API key pun aplikasi tetap jalan, tapi hanya menyimpan transkrip (tanpa ringkasan).
+- Punya langganan **Claude Pro/Max**? Ringkasan dibuat lewat Claude Code dan memakai kuota
+  langgananmu, **tanpa API key dan tanpa biaya tambahan**.
 
 ## Instalasi
 
@@ -47,8 +48,24 @@ python -m venv .venv
 pip install -r requirements.txt
 ```
 
-Salin `.env.example` menjadi `.env`, lalu isi `ANTHROPIC_API_KEY` (dapatkan di
-[console.anthropic.com](https://console.anthropic.com)).
+Salin `.env.example` menjadi `.env`.
+
+### Ringkasan dengan langganan Claude Pro/Max (tanpa API key)
+
+Pasang Claude Code lalu login sekali dengan akun Claude Pro-mu:
+
+```bash
+curl -fsSL https://claude.ai/install.sh | bash   # atau: npm install -g @anthropic-ai/claude-code
+claude                                            # pilih login dengan akun Claude, lalu ketik /exit
+```
+
+Selesai. Aplikasi otomatis memakai Claude Code untuk merangkum. Pemakaiannya dihitung dalam batas
+kuota langganan Pro, sama seperti saat kamu chat di claude.ai.
+
+### Atau dengan Claude API (berbayar per pemakaian)
+
+Isi `ANTHROPIC_API_KEY` di `.env` (dapatkan di [console.anthropic.com](https://console.anthropic.com)).
+Jika key diisi, mode `auto` akan memakai API.
 
 > Linux: pasang juga `sudo apt install python3-tk` jika belum ada (butuh PulseAudio atau PipeWire).
 
@@ -86,12 +103,14 @@ python -m meeting_notes proses rekaman-rapat.m4a
 
 | Variabel | Default | Keterangan |
 |---|---|---|
-| `ANTHROPIC_API_KEY` | – | Wajib untuk membuat ringkasan |
+| `SUMMARIZER` | `auto` | `auto`, `claude-code` (langganan Pro/Max), `api` (berbayar), atau `none` (transkrip saja) |
+| `CLAUDE_CODE_MODEL` | – | Model untuk mode `claude-code`, mis. `sonnet` atau `opus`. Kosong = default akunmu |
+| `ANTHROPIC_API_KEY` | – | Hanya untuk mode `api` |
 | `WHISPER_MODEL` | `small` | `tiny`/`base` lebih cepat, `medium`/`large-v3` lebih akurat (butuh laptop lebih kuat) |
 | `MEETING_LANGUAGE` | `id` | Bahasa utama rapat. `id` tetap menangkap istilah Inggris; pakai `auto` jika rapat dominan Inggris |
 | `OUTPUT_DIR` | `~/MeetingNotes` | Folder notulen. Rekaman audio disimpan di subfolder `rekaman/` |
 | `CAPTURE_SYSTEM_AUDIO` | `true` | Rekam juga suara dari speaker/headphone |
-| `CLAUDE_MODEL` | `claude-opus-5-5` | Model Claude untuk merangkum |
+| `CLAUDE_MODEL` | `claude-opus-5-5` | Model untuk mode `api` |
 
 ## Merekam suara peserta meeting online
 
@@ -119,7 +138,7 @@ Struktur kode:
 | `meeting_notes/widget.py` | Widget Tkinter (tombol, timer, level suara) |
 | `meeting_notes/recorder.py` | Rekam mikrofon + audio sistem, gabungkan jadi satu WAV |
 | `meeting_notes/transcriber.py` | Transkripsi lokal dengan faster-whisper |
-| `meeting_notes/summarizer.py` | Ringkasan terstruktur dengan Claude |
+| `meeting_notes/summarizer.py` | Ringkasan terstruktur lewat Claude Code (langganan) atau Claude API |
 | `meeting_notes/exporter.py` | Ekspor ke Markdown dan Word |
 | `meeting_notes/pipeline.py` | Menyatukan semua langkah |
 
