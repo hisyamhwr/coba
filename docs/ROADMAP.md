@@ -25,7 +25,7 @@ Target: aplikasi pencatat rapat ala Fireflies yang berjalan langsung di Mac, tan
 | 2.1.0 | Perpustakaan rapat, pencarian, dan "Tanya ke rapat" | |
 | 2.2.0 | Label pembicara (siapa bicara apa) | Sebagian sudah ada lewat mesin cloud di 1.2.0 |
 
-Referensi UI untuk 2.0.0 ada di [`design-references/`](design-references/).
+Referensi UI untuk 2.0.0 ada di [`design-references/`](design-references/). Status lengkap: [CHECKLIST.md](CHECKLIST.md).
 
 ## Perangkat target
 
