@@ -97,7 +97,10 @@ class MeetingWidget:
         self.state = "recording"
         self.open_button.pack_forget()
         self.button.configure(text="■  Selesai & Rangkum", bg=RED, activebackground=RED)
-        self.set_status(" ".join(warnings) or "Mendengarkan rapat...")
+        # Tampilkan mic yang dipakai, agar terlihat apakah earphone/mic eksternal sudah aktif.
+        mic = f" via {self.recorder.mic_name}" if self.recorder.mic_name else ""
+        self.listening_status = " ".join([f"Mendengarkan{mic}...", *warnings])
+        self.set_status(self.listening_status)
 
     def stop(self) -> None:
         self.state = "processing"
@@ -133,7 +136,7 @@ class MeetingWidget:
             elif kind == "download_failed":
                 # Jangan menimpa status rekaman, proses, atau hasil: model diunduh ulang saat diproses.
                 if self.state == "recording":
-                    self.set_status("Mendengarkan rapat... (Model Whisper belum terunduh, akan dicoba lagi.)")
+                    self.set_status(f"{self.listening_status}\n(Model Whisper belum terunduh, akan dicoba lagi.)")
                 elif self.state == "idle" and not self.open_button.winfo_ismapped():
                     self.set_status("Model Whisper belum terunduh, cek internet. Akan dicoba lagi.")
             elif kind == "done":

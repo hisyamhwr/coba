@@ -4,7 +4,7 @@
 
 | Area | Hasil |
 |---|---|
-| 32 unit test (termasuk mesin cloud dengan respons tiruan) (ekspor, pemotongan audio, paragraf, halusinasi, koreksi, kamus, pipeline, summarizer) | ✅ Lulus |
+| 34 unit test (termasuk mesin cloud dengan respons tiruan) (ekspor, pemotongan audio, paragraf, halusinasi, koreksi, kamus, pipeline, summarizer) | ✅ Lulus |
 | Koreksi + MoM dengan Claude sungguhan (Claude Code), transkrip berisi "PoIP"/"girlfriend"/"back and" | ✅ Semua terkoreksi, kamus terisi 11 istilah |
 | Widget di layar virtual: siap → merekam → selesai, mikrofon gagal, pemrosesan gagal | ✅ (setelah perbaikan 1.1.1) |
 
@@ -15,7 +15,7 @@
 | 1.1.1 | Saat diam, transkrip mengulang "mengalokasikan dan" puluhan kali | ✅ Diperbaiki di 1.1.2 |
 | 1.1.1 | "store turner" dikoreksi jadi "store tertentu", seharusnya "setor tunai" | ✅ Diperbaiki di 1.1.2 (diuji dengan 5 salah dengar baru: semuanya benar) |
 | 1.1.1 | Koreksi menambah kata yang tidak diucapkan ("POS. Lalu POS mengirimkan") | ✅ Diperbaiki di 1.1.2 |
-| 1.1.2 | Transkrip Whisper lokal masih banyak salah (artikulasi kurang jelas) | ➡️ 1.2.0: mesin cloud + uji tanding |
+| 1.1.2 | Transkrip Whisper lokal masih banyak salah (artikulasi kurang jelas) | ➡️ 1.2.0: mesin cloud (opsional); 1.3.0: kamus dasar, penguat suara, tips mic |
 
 ## Belum bisa diuji di server, wajib dicek di Mac
 
@@ -25,8 +25,8 @@ dibuktikan di MacBook-mu:
 | # | Skenario | Cara cek | Yang diharapkan |
 |---|---|---|---|
 | 1 | Update | `git pull` lalu `pip install -r requirements.txt` | Tidak ada error; `mlx-whisper` terpasang |
-| 2 | Unduh model | Buka widget, tunggu ±5-10 menit pertama kali | Judul jendela `Meeting Notes v1.2.0`, tidak ada pesan gagal unduh |
-| 3 | Rapat pendek (5 menit) | Ngobrol pakai istilah kantor (VoIP, frontend, Daily Banking) | Transkrip jauh lebih akurat dari 1.0.1 |
+| 2 | Unduh model | Buka widget, tunggu ±5-10 menit pertama kali | Judul jendela `Meeting Notes v1.3.0`, tidak ada pesan gagal unduh |
+| 3 | Rapat pendek (5 menit) | Ngobrol pakai istilah kantor (VoIP, frontend, setor tunai), **pakai earphone ber-mic** | Widget menulis "Mendengarkan via <earphone>"; transkrip lebih akurat dari sebelumnya |
 | 4 | Kecepatan | Catat lama proses setelah klik **Selesai** untuk rapat 5 menit | Idealnya < 1-2 menit |
 | 5 | Kamus belajar | Lakukan rapat kedua, buka `~/MeetingNotes/kamus.txt` | Berisi istilah dari rapat pertama |
 | 6 | Rapat panjang (≥ 1 jam) | Pakai rapat sungguhan | Status "Mentranskrip... x%" bergerak, Mac tidak hang, MoM per agenda |

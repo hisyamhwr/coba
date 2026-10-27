@@ -171,7 +171,10 @@ def test_pipeline_uses_cloud_engine_with_speakers(monkeypatch, tmp_path):
     result = pipeline.process_recording(_fake_recording(tmp_path), settings, on_status=lambda m: None,
                                         transcriber=_NoLocal())
     md = result.markdown_path.read_text(encoding="utf-8")
-    assert seen == {"suffix": ".flac", "keyterms": ["setor tunai"]}
+    assert seen["suffix"] == ".flac"
+    # Kamus yang dipelajari lebih dulu, lalu kamus dasar (tanpa duplikat).
+    assert seen["keyterms"][0] == "setor tunai" and "teller" in seen["keyterms"]
+    assert seen["keyterms"].count("setor tunai") == 1
     assert "**[00:00] Pembicara 1:** Halo semua." in md
     assert "**[00:02] Pembicara 2:** Siap." in md
     assert "whisper lokal" not in md

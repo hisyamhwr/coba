@@ -112,6 +112,24 @@ Kamu tidak perlu mengisi kamus apa pun. Setiap selesai rapat:
 
 `kamus.txt` adalah file teks biasa; boleh diedit manual bila ada istilah yang terus salah.
 
+Sejak rapat pertama, aplikasi juga memakai **kamus dasar** bawaan (`meeting_notes/kamus_dasar.txt`):
+±130 istilah perbankan, produk digital, dan IT yang sering salah dengar (setor tunai, nasabah, QRIS,
+frontend, UAT, go-live, dll.). Istilah dari rapatmu sendiri selalu diprioritaskan di atasnya.
+
+## Tips audio: paling berpengaruh ke akurasi
+
+Akurasi transkrip paling ditentukan oleh **seberapa jelas suara masuk ke mikrofon**, bukan oleh software.
+
+- **Pakai mic yang dekat ke mulut.** Earphone berkabel dengan mic, mic USB, atau mic clip-on jauh lebih
+  jernih daripada mic laptop yang ikut menangkap gema ruangan dan suara ketikan.
+- **Pilih mic-nya di Mac:** System Settings → Sound → Input → pilih earphone/mic eksternal. Saat merekam,
+  widget menampilkan *"Mendengarkan via <nama mic>"*, jadi kamu bisa memastikan mic yang benar dipakai.
+- **Rapat offline:** taruh laptop/mic di tengah meja, dekat dengan orang yang paling banyak bicara.
+- **Meeting online tanpa headphone:** naikkan volume speaker secukupnya agar suara peserta lain
+  tertangkap mic. Perekaman audio Zoom/Meet/Teams secara langsung (digital) hadir di versi 2.0.
+- Aplikasi otomatis menguatkan suara yang terlalu pelan sebelum ditranskripsi, tapi tidak bisa
+  menghilangkan gema atau suara bising; mic yang baik tetap paling berpengaruh.
+
 ## Transkripsi cloud (paling akurat untuk campuran Indonesia-Inggris)
 
 Whisper lokal gratis dan offline, tetapi untuk bicara cepat atau artikulasi kurang jelas, mesin

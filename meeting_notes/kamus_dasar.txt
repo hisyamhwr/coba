@@ -1,0 +1,118 @@
+# Kamus dasar: istilah umum rapat perbankan, produk digital, dan IT (campuran Indonesia-Inggris).
+# Dipakai bersama kamus yang dipelajari dari rapatmu (~/MeetingNotes/kamus.txt).
+# Urutan penting: istilah teratas paling sering salah dengar dan diprioritaskan untuk Whisper.
+setor tunai
+tarik tunai
+nasabah
+rekening
+teller
+frontend
+backend
+VoIP
+merchant
+POS
+Daily Banking
+mobile banking
+internet banking
+core banking
+transfer antarbank
+virtual account
+QRIS
+EDC
+BI-FAST
+RTGS
+SKN
+kliring
+settlement
+rekonsiliasi
+mutasi rekening
+saldo
+limit transaksi
+buku tabungan
+tabungan
+giro
+deposito
+kartu debit
+kartu kredit
+ATM
+KYC
+AML
+OJK
+Bank Indonesia
+customer service
+CS
+cabang
+kantor cabang
+SOP
+compliance
+audit
+API
+endpoint
+SDK
+deploy
+staging
+production
+UAT
+SIT
+go-live
+rollout
+release
+hotfix
+bug
+issue
+ticket
+sprint
+backlog
+user story
+PRD
+BRD
+UI/UX
+dashboard
+database
+server
+infra
+DevOps
+QA
+testing
+timeline
+deadline
+milestone
+roadmap
+stakeholder
+vendor
+budget
+approval
+follow up
+action item
+KPI
+OKR
+MoM
+weekly sync
+standup
+review
+feedback
+onboarding
+user
+customer
+traffic
+downtime
+maintenance
+monitoring
+notifikasi
+OTP
+PIN
+login
+autentikasi
+fraud
+chargeback
+refund
+dispute
+fee
+biaya admin
+cashback
+promo
+campaign
+Android
+iOS
+web
+app

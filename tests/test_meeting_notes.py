@@ -28,6 +28,7 @@ from meeting_notes.transcriber import (
     chunk_bounds,
     clean_segments,
     collapse_repeats,
+    normalize_loudness,
     format_timestamp,
     to_paragraphs,
 )
@@ -271,6 +272,32 @@ def test_glossary_learns_and_prioritizes_recent_terms(tmp_path):
     assert g.whisper_hint(max_chars=30) == "Daily Banking, voip"
 
 
+def test_base_glossary_fills_after_learned_terms(tmp_path):
+    base = tmp_path / "dasar.txt"
+    base.write_text("# komentar\nsetor tunai\nVoIP\nteller\n", encoding="utf-8")
+    g = Glossary(tmp_path / "kamus.txt", base_path=base)
+    g.merge(["Daily Banking", "voip"])
+    assert g.all_terms == ["Daily Banking", "voip", "setor tunai", "teller"]
+    g.save()
+    # Kamus dasar tidak ikut tersimpan ke kamus pribadi.
+    assert Glossary(tmp_path / "kamus.txt", base_path=None).terms == ["Daily Banking", "voip"]
+    # Kamus dasar bawaan benar-benar ada dan berisi istilah dari temuan QA.
+    bundled = Glossary(tmp_path / "kosong.txt").all_terms
+    assert {"setor tunai", "frontend", "VoIP", "nasabah"} <= set(bundled)
+    assert len(Glossary(tmp_path / "kosong.txt").whisper_hint()) <= 400
+
+
+def test_normalize_loudness_boosts_quiet_speech_only():
+    quiet = (np.sin(np.arange(16000 * 2) / 5) * 0.02).astype("float32")  # butuh gain ~7x
+    boosted = normalize_loudness(quiet)
+    assert np.abs(boosted).max() == pytest.approx(0.1 * np.sqrt(2), rel=0.05)
+    assert np.abs(normalize_loudness(quiet * 0.0001)).max() <= 0.1 * np.sqrt(2) * 1.01  # gain dibatasi 10x
+    normal = (np.sin(np.arange(16000) / 5) * 0.14).astype("float32")
+    assert normalize_loudness(normal) is normal  # sudah cukup keras, tidak diubah
+    silence = np.zeros(16000, dtype="float32")
+    assert normalize_loudness(silence) is silence
+
+
 def test_transcriber_prompt_includes_vocabulary():
     t = Transcriber(engine="faster-whisper")
     assert "Istilah" not in t.prompt()
@@ -299,8 +326,8 @@ def test_pipeline_applies_corrections_and_updates_glossary(tmp_path, monkeypatch
     md = result.markdown_path.read_text(encoding="utf-8")
     assert "Budi follow up ke vendor VoIP Jumat." in md
     assert "| follow up ke vendor | follow up ke vendor VoIP | 1 |" in md
-    assert seen["glossary"] == ["Daily Banking"]
-    assert transcriber.vocabulary == "Daily Banking"
+    assert seen["glossary"][0] == "Daily Banking" and "setor tunai" in seen["glossary"]
+    assert transcriber.vocabulary.startswith("Daily Banking, setor tunai")
     assert Glossary(settings.glossary_path).terms == ["VoIP", "Daily Banking"]
 
 

@@ -48,6 +48,7 @@ class Recorder:
         self.capture_system_audio = capture_system_audio
         self._stop = threading.Event()
         self._tracks: list[_Track] = []
+        self.mic_name = ""
 
     def start(self) -> list[str]:
         """Mulai merekam. Mengembalikan peringatan (mis. audio sistem tidak tersedia)."""
@@ -57,7 +58,9 @@ class Recorder:
         self._stop.clear()
         warnings: list[str] = []
 
-        sources = [("mic", sc.default_microphone())]
+        mic = sc.default_microphone()
+        self.mic_name = mic.name
+        sources = [("mic", mic)]
         if self.capture_system_audio:
             try:
                 speaker = sc.default_speaker()

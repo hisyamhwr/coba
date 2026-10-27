@@ -58,7 +58,7 @@ def transcribe(
                     # FLAC: tanpa kehilangan kualitas tapi ukurannya +-separuh WAV, jadi unggahan lebih cepat.
                     path = Path(tmp) / "rapat.flac"
                     sf.write(path, audio, SAMPLE_RATE, format="FLAC")
-                    return clean_segments(transcribe_with_fallback(provider, path, glossary.terms)), None
+                    return clean_segments(transcribe_with_fallback(provider, path, glossary.all_terms)), None
             except Exception as exc:  # noqa: BLE001 - rapat tetap tercatat dengan Whisper lokal
                 note = f"{provider.name} gagal ({str(exc)[:150]}), memakai Whisper lokal."
 
@@ -92,7 +92,7 @@ def process_recording(
     else:
         on_status("Mengoreksi transkrip & menyusun MoM...")
         try:
-            summary = summarizer.summarize(segments_to_text(paragraphs), glossary.terms)
+            summary = summarizer.summarize(segments_to_text(paragraphs), glossary.all_terms)
         except Exception as exc:  # noqa: BLE001 - transkrip tetap disimpan walau ringkasan gagal
             note = f"Ringkasan gagal dibuat ({exc}). Transkrip tetap disimpan."
 

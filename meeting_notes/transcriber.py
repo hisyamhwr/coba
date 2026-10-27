@@ -120,6 +120,26 @@ def clean_segments(segments: list[Segment]) -> list[Segment]:
     return result
 
 
+def normalize_loudness(audio: np.ndarray, target_rms: float = 0.1, max_gain: float = 10.0) -> np.ndarray:
+    """Samakan volume ucapan ke tingkat yang nyaman untuk Whisper.
+
+    Suara pelan (mic jauh, pembicara bersuara kecil) dikuatkan hingga max_gain kali. Acuan volumenya adalah
+    bagian paling keras (persentil 95 per 100 ms) supaya jeda sunyi tidak ikut menaikkan penguatan.
+    """
+    frame = SAMPLE_RATE // 10
+    usable = len(audio) // frame * frame
+    if usable == 0:
+        return audio
+    rms = np.sqrt((audio[:usable].reshape(-1, frame) ** 2).mean(axis=1))
+    speech_level = float(np.percentile(rms, 95))
+    if speech_level < 1e-4:
+        return audio
+    gain = min(target_rms / speech_level, max_gain)
+    if 0.8 < gain < 1.25:
+        return audio
+    return np.clip(audio * gain, -1.0, 1.0).astype(np.float32)
+
+
 def chunk_bounds(audio: np.ndarray, sr: int = SAMPLE_RATE, chunk_seconds: int = CHUNK_SECONDS,
                  search_seconds: int = CUT_SEARCH_SECONDS) -> list[tuple[int, int]]:
     """Bagi audio menjadi potongan +-chunk_seconds, dipotong di bagian paling sunyi."""
@@ -223,7 +243,7 @@ class Transcriber:
                 offset = start / SAMPLE_RATE
                 segments += [
                     Segment(s.start + offset, s.end + offset, s.text)
-                    for s in self.engine.transcribe(chunk, self.prompt())
+                    for s in self.engine.transcribe(normalize_loudness(chunk), self.prompt())
                 ]
             if on_progress:
                 on_progress((i + 1) / len(bounds))

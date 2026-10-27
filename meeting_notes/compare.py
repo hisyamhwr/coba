@@ -49,7 +49,7 @@ def compare(audio_path: Path, settings: Settings, start: float = 0, duration: fl
     clip_path = outdir / "potongan.wav"
     sf.write(clip_path, clip, SAMPLE_RATE, subtype="PCM_16")
 
-    keyterms = Glossary(settings.glossary_path).terms
+    keyterms = Glossary(settings.glossary_path).all_terms
     providers: list[Provider] = [cls() for cls in PROVIDERS.values()]
     active = [p for p in providers if p.api_key]
     skipped = [p for p in providers if not p.api_key]
