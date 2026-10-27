@@ -1,6 +1,6 @@
 # Checklist Meeting Notes
 
-Status per 27-10-2026, versi terakhir **1.3.0**.
+Status per 27-10-2026, versi terakhir **2.0.0** (kode selesai, menunggu build & QA di Mac).
 
 Keterangan:
 - ✅ **Selesai, terbukti di Mac**: sudah kamu pakai di MacBook dan berjalan.
@@ -17,7 +17,7 @@ Keterangan:
 - ✅ Rekam mikrofon laptop (1.0.1)
 - ☑️ Tampilkan nama mic yang dipakai, mis. "Mendengarkan via ..." (1.3.0)
 - ☑️ Rekaman tetap aman dan bisa diproses ulang bila pemrosesan gagal (1.1.1)
-- ⬜ Rekam audio Zoom/Meet/Teams langsung (digital) di Mac → **2.0.0**
+- ⚠️ Rekam audio Zoom/Meet/Teams langsung (digital) di Mac → dibuat di **2.0.0**
   (di Windows/Linux sudah bisa; di Mac saat ini hanya lewat mic/speaker)
 
 ### Transkripsi
@@ -28,7 +28,7 @@ Keterangan:
 - ⚠️ Mesin cloud: ElevenLabs, AssemblyAI, Deepgram + cadangan otomatis ke Whisper lokal (1.2.0)
 - ⚠️ Perintah `bandingkan` untuk uji tanding mesin (1.2.0)
 - ⚠️ Label pembicara "Pembicara 1, 2" (hanya dengan mesin cloud) (1.2.0)
-- ⬜ Transkrip live selama rapat → **2.0.0**
+- ⚠️ Transkrip live selama rapat → dibuat di **2.0.0**
 
 ### Akurasi & kosakata
 - ✅ Koreksi salah dengar oleh Claude, mis. girlfriend → frontend (1.1.0), terbukti di Mac
@@ -63,36 +63,39 @@ Hasil QA ini sebaiknya dilaporkan sebelum atau sambil mengerjakan 2.0.0, karena 
 
 ---
 
-## 3. Akan dikerjakan: 2.0.0 (aplikasi Mac native)
+## 3. 2.0.0 (aplikasi Mac native): kode selesai, belum pernah di-build
+
+Server tidak punya Swift/macOS, jadi semua butir di bawah ⚠️ sampai berhasil di-build dan dicoba di Mac-mu.
 
 ### Fondasi
-- ⬜ Proyek Xcode (Swift/SwiftUI) untuk macOS 26 Tahoe, dijalankan di MacBook Pro M1
-- ⬜ Aplikasi menu bar (tanpa terminal), bisa dibuka otomatis saat login
-- ⬜ Izin macOS: Mikrofon dan "Screen & System Audio Recording"
+- ⚠️ Paket Swift + `mac/build.sh` yang menghasilkan `MeetingNotes.app` (tanpa perlu membuat proyek Xcode)
+- ⚠️ Aplikasi menu bar (tanpa terminal); bisa ditambahkan ke Login Items
+- ⚠️ Izin macOS: Mikrofon, Speech Recognition, Screen & System Audio Recording
 
-### Tampilan ala Dynamic Island (dari `design-references/`)
-- ⬜ Siap: kapsul kecil di notch dengan ikon mikrofon
-- ⬜ Merekam (ringkas): titik merah, timer besar, gelombang suara
-- ⬜ Merekam (diperluas): 2-3 baris transkrip live, chip **Tandai penting**, tombol stop oranye
-- ⬜ Memproses: progress bar *Mentranskrip → Mengoreksi → Menyusun MoM*
-- ⬜ Selesai: judul rapat, "N keputusan · M action item", chip **Buka MoM** dan **Salin**
+### Tampilan ala Dynamic Island
+- ⚠️ Siap: kapsul kecil; klik → tombol **Mulai Catat** dan **Folder**
+- ⚠️ Merekam (ringkas): titik merah, timer, gelombang suara, jumlah momen penting
+- ⚠️ Merekam (diperluas): 3 baris transkrip live, chip **Tandai penting**, tombol stop oranye
+- ⚠️ Memproses: progress *Mentranskrip → Mengoreksi → Menyusun MoM*
+- ⚠️ Selesai: judul rapat, "N keputusan · M action item · K momen penting", **Buka MoM**, **Salin**, **Folder**
+- ⚠️ Gagal: pesan + **Buka folder rekaman**
 
 ### Audio
-- ⬜ Rekam mic
-- ⬜ Rekam audio Zoom/Meet/Teams langsung (digital), tanpa BlackHole, juga saat pakai headphone
-- ⬜ Gabung keduanya jadi satu rekaman
+- ⚠️ Rekam mic (nama mic tampil)
+- ⚠️ Rekam audio Zoom/Meet/Teams langsung (ScreenCaptureKit), juga saat pakai headphone
+- ⚠️ Gabung keduanya jadi satu `meeting.wav`
 
 ### Selama rapat
-- ⬜ Transkrip live (perkiraan cepat, ditampilkan di notch)
-- ⬜ Tombol **Tandai penting** → momen ditandai muncul sebagai bagian khusus di MoM
-- ⬜ Shortcut keyboard global untuk mulai/berhenti
+- ⚠️ Transkrip live (pengenal suara macOS, bahasa Indonesia)
+- ⚠️ **Tandai penting** → bagian "Momen Penting" di MoM (bagian Python ☑️ teruji dengan Claude sungguhan)
+- ⚠️ Shortcut global ⌃⌥M
 
 ### Setelah rapat
-- ⬜ Pemrosesan akhir yang akurat (Whisper/cloud + koreksi Claude + kamus + MoM), memakai ulang kode 1.x
-- ⬜ Notifikasi saat MoM siap; buka atau salin MoM sekali klik
+- ☑️ Pemrosesan akhir memakai ulang Python 1.x lewat `proses --json` (teruji di server)
+- ⚠️ Notifikasi saat MoM siap; Buka/Salin MoM sekali klik
 
 ### QA 2.0.0
-- ⬜ Checklist QA khusus 2.0.0, diuji bertahap di Mac-mu (aku tulis kode, kamu build & coba di Xcode)
+- ⬜ Build di Mac dan jalankan checklist QA 2.0.0 di [QA.md](QA.md)
 
 ---
 

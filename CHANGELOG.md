@@ -2,6 +2,17 @@
 
 Format versi: `MAYOR.FITUR.PERBAIKAN` (lihat [docs/ROADMAP.md](docs/ROADMAP.md)).
 
+## 2.0.0
+
+- **Aplikasi Mac native** (`mac/`): aplikasi menu bar dengan "pulau" ala Dynamic Island di tengah atas layar,
+  tanpa terminal. Status siap, merekam (ringkas/diperluas), memproses, selesai, dan gagal.
+- Rekam mic + **audio Zoom/Meet/Teams secara digital** lewat ScreenCaptureKit, tanpa BlackHole dan tetap jalan
+  saat memakai headphone; keduanya digabung menjadi satu rekaman.
+- **Transkrip live** (pengenal suara macOS, bahasa Indonesia) di pulau notch.
+- Tombol **Tandai penting**: momen yang ditandai menjadi bagian "Momen Penting" di MoM.
+- Shortcut global ⌃⌥M, notifikasi saat MoM siap, tombol Buka MoM / Salin / Folder.
+- Python: `proses --json --penting --mulai` untuk aplikasi Mac; skema MoM menambah `highlights`.
+
 ## 1.3.0
 
 - Kamus dasar bawaan (±130 istilah perbankan, produk digital, dan IT) dipakai sejak rapat pertama, setelah

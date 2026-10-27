@@ -1,4 +1,26 @@
-# QA sebelum masuk versi 2.0.0
+# QA
+
+## QA 2.0.0: aplikasi Mac (wajib di Mac)
+
+Kode Swift belum pernah di-compile (server tidak punya macOS). Jalankan berurutan; berhenti dan kirim
+pesan galat/screenshot di langkah pertama yang gagal. Bug diperbaiki sebagai 2.0.1, 2.0.2, dst.
+
+| # | Langkah | Yang diharapkan |
+|---|---|---|
+| 1 | `conda activate meeting && ./mac/build.sh` (lihat [mac/README.md](../mac/README.md)) | Berakhir dengan "Selesai: mac/build/MeetingNotes.app" |
+| 2 | `open mac/build/MeetingNotes.app` | Kapsul "Meeting Notes" muncul di tengah atas layar; ikon gelombang di menu bar |
+| 3 | Klik kapsul → **Mulai Catat** | Diminta izin Microphone & Speech Recognition; lalu timer berjalan dan nama mic tampil |
+| 4 | Bicara 1 menit | Transkrip live muncul dan ikut berubah; gelombang suara bergerak |
+| 5 | Klik **Tandai penting** 2x | Chip menjadi "Tandai penting (2)" |
+| 6 | Tekan ⌃⌥M | Rekaman berhenti, status berpindah ke "Memproses" |
+| 7 | Tunggu | Kartu "MoM siap" + notifikasi; **Buka MoM** membuka .docx berisi "Momen Penting" |
+| 8 | Izinkan Screen & System Audio Recording, buka ulang app, putar video YouTube sambil merekam **dengan headphone** | Suara video ikut tertranskrip di MoM |
+| 9 | Meeting Zoom/Meet sungguhan ≥ 15 menit | Suara peserta lain dan suaramu tercatat; MoM per agenda |
+| 10 | Klik di luar pulau / pindah Space / layar penuh | Pulau tetap di atas, tidak menghalangi kerja |
+
+---
+
+# QA 1.x
 
 ## Sudah diuji otomatis (di server, Linux)
 

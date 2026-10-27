@@ -59,6 +59,9 @@ def render_markdown(
             ]
         else:
             lines.append("- -")
+        if summary.highlights:
+            lines += ["", "## Momen Penting", ""]
+            lines += [f"- `{h.time}` {h.summary}" for h in summary.highlights]
         lines += ["", "## Pembahasan per Agenda", ""]
         for i, item in enumerate(summary.agenda, 1):
             lines += [f"### {i}. {item.topic} `{item.start_time}`", "", *_bullets(item.points)]
@@ -116,6 +119,10 @@ def write_docx(
                     cell.text = text
         else:
             bullets([])
+
+        if summary.highlights:
+            doc.add_heading("Momen Penting", level=1)
+            bullets([f"[{h.time}] {h.summary}" for h in summary.highlights])
 
         doc.add_heading("Pembahasan per Agenda", level=1)
         for i, item in enumerate(summary.agenda, 1):

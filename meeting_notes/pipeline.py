@@ -32,6 +32,9 @@ class NotesResult:
     markdown_path: Path
     docx_path: Path
     note: str | None
+    title: str = ""
+    decisions: int = 0
+    action_items: int = 0
 
 
 def _slug(text: str) -> str:
@@ -74,7 +77,9 @@ def process_recording(
     started_at: datetime | None = None,
     on_status: Callable[[str], None] = print,
     transcriber: Transcriber | None = None,
+    marks: list[float] = (),
 ) -> NotesResult:
+    """marks: detik-detik saat pengguna menekan "Tandai penting" (dari aplikasi Mac)."""
     started_at = started_at or datetime.now()
     glossary = Glossary(settings.glossary_path)
     audio = load_audio(audio_path)
@@ -92,7 +97,7 @@ def process_recording(
     else:
         on_status("Mengoreksi transkrip & menyusun MoM...")
         try:
-            summary = summarizer.summarize(segments_to_text(paragraphs), glossary.all_terms)
+            summary = summarizer.summarize(segments_to_text(paragraphs), glossary.all_terms, list(marks))
         except Exception as exc:  # noqa: BLE001 - transkrip tetap disimpan walau ringkasan gagal
             note = f"Ringkasan gagal dibuat ({exc}). Transkrip tetap disimpan."
 
@@ -116,4 +121,10 @@ def process_recording(
     docx_path = write_docx(settings.output_dir / f"{base}.docx", info, paragraphs, summary, note, corrections)
 
     on_status("Selesai!")
-    return NotesResult(md_path, docx_path, note)
+    if summary:
+        return NotesResult(md_path, docx_path, note, summary.title, len(summary.decisions), len(summary.action_items))
+    return NotesResult(md_path, docx_path, note, _title_fallback(started_at))
+
+
+def _title_fallback(started_at: datetime) -> str:
+    return f"Rapat {started_at:%d-%m-%Y}"

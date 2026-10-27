@@ -47,6 +47,7 @@ SUMMARY = MeetingSummary(
     ],
     action_items=[ActionItem(task="Follow up ke vendor", owner="Budi", deadline="Jumat")],
     open_questions=[],
+    highlights=[],
 )
 INFO = MeetingInfo(started_at=datetime(2026, 10, 27, 9, 30), duration_seconds=3725)
 
@@ -232,7 +233,7 @@ def test_claude_code_summarizer_reports_login_error(monkeypatch):
 
 def test_pipeline_with_summary(tmp_path, monkeypatch):
     monkeypatch.setenv("ANTHROPIC_API_KEY", "test")
-    monkeypatch.setattr(Summarizer, "summarize", lambda self, transcript, glossary=(): SUMMARY)
+    monkeypatch.setattr(Summarizer, "summarize", lambda self, transcript, glossary=(), marks=(): SUMMARY)
     settings = Settings(output_dir=tmp_path / "out")
     result = process_recording(_audio(tmp_path), settings, INFO.started_at, lambda _: None, FakeTranscriber())
     assert result.markdown_path.name == "2026-10-27_0930_sinkronisasi-vendor.md"
@@ -313,7 +314,7 @@ def test_pipeline_applies_corrections_and_updates_glossary(tmp_path, monkeypatch
     })
     seen = {}
 
-    def fake_summarize(self, transcript, glossary=()):
+    def fake_summarize(self, transcript, glossary=(), marks=()):
         seen["glossary"] = list(glossary)
         return summary
 
@@ -346,3 +347,43 @@ def test_summarizer_request(monkeypatch):
     assert calls["output_format"] is MeetingSummary
     expected = "<kamus>\n(masih kosong)\n</kamus>\n\n<transkrip>\n[00:00] halo\n</transkrip>"
     assert calls["messages"][0]["content"] == expected
+
+
+def test_highlights_in_input_and_export():
+    from meeting_notes.summarizer import Highlight, _build_input
+
+    text = _build_input("[00:00] halo", ["VoIP"], [750.4, 3725])
+    assert text.endswith("<momen_penting>\n12:30, 01:02:05\n</momen_penting>")
+    assert "<momen_penting>" not in _build_input("[00:00] halo", [])
+    summary = SUMMARY.model_copy(update={"highlights": [Highlight(time="12:30", summary="Rilis diundur.")]})
+    md = render_markdown(INFO, SEGMENTS, summary)
+    assert "## Momen Penting\n\n- `12:30` Rilis diundur." in md
+    assert md.index("## Momen Penting") < md.index("## Pembahasan per Agenda")
+
+
+def test_cli_json_mode_for_mac_app(tmp_path, monkeypatch, capsys):
+    import sys
+
+    from meeting_notes import __main__ as cli
+    from meeting_notes import pipeline
+
+    seen = {}
+
+    def fake_process(audio, settings, started_at, on_status, marks=()):
+        seen.update(marks=marks, started_at=started_at)
+        on_status("Mentranskrip... 50%")
+        return pipeline.NotesResult(tmp_path / "a.md", tmp_path / "a.docx", None, "Sinkronisasi Vendor", 2, 3)
+
+    monkeypatch.setattr(pipeline, "process_recording", fake_process)
+    marks = tmp_path / "penting.json"
+    marks.write_text("[12.5, 300]")
+    monkeypatch.setattr(sys, "argv", ["meeting_notes", "proses", str(tmp_path / "rapat.wav"), "--json",
+                                      "--penting", str(marks), "--mulai", "2026-10-27T09:30:00"])
+    cli.main()
+    lines = capsys.readouterr().out.strip().splitlines()
+    assert lines[0] == "STATUS\tMentranskrip... 50%"
+    kind, payload = lines[-1].split("\t", 1)
+    assert kind == "RESULT"
+    assert json.loads(payload)["title"] == "Sinkronisasi Vendor"
+    assert json.loads(payload)["action_items"] == 3
+    assert seen == {"marks": [12.5, 300], "started_at": datetime(2026, 10, 27, 9, 30)}

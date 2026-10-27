@@ -16,6 +16,10 @@ join ke meeting, karena ia merekam langsung dari mikrofon dan speaker laptopmu.
  └────────────────────┘
 ```
 
+> **Baru di 2.0.0:** aplikasi Mac native dengan tampilan ala Dynamic Island, rekam audio Zoom/Meet/Teams
+> langsung, transkrip live, dan tombol "Tandai penting". Lihat [mac/README.md](mac/README.md).
+> Widget Python di bawah tetap bisa dipakai.
+
 ## Cara kerja
 
 ```

@@ -16,6 +16,7 @@ import anthropic
 from pydantic import BaseModel, Field
 
 from .config import Settings
+from .transcriber import format_timestamp
 
 SYSTEM_PROMPT = """\
 Kamu adalah notulen rapat yang teliti. Kamu menerima transkrip otomatis sebuah rapat yang \
@@ -40,7 +41,11 @@ Langkah 2 - catat istilah penting di `glossary_terms`: nama orang, produk, proye
 teknis, dan singkatan dari rapat ini, dalam ejaan yang benar (maksimal 30). Ini dipakai untuk \
 membantu transkripsi rapat berikutnya.
 
-Langkah 3 - susun Minutes of Meeting (MoM) yang langsung ke inti:
+Langkah 3 - jika ada <momen_penting>, pengguna menekan tombol "Tandai penting" pada waktu-waktu \
+tersebut. Untuk setiap waktu, isi `highlights` dengan ringkasan 1-2 kalimat tentang apa yang \
+sedang dibahas atau diputuskan di sekitar waktu itu (+-1 menit). Jika tidak ada, kosongkan.
+
+Langkah 4 - susun Minutes of Meeting (MoM) yang langsung ke inti:
 - Ringkasan eksekutif 3-5 kalimat: apa tujuan rapat, apa hasilnya.
 - Kelompokkan pembahasan per agenda/topik sesuai urutan waktu. Rapat panjang biasanya 3-10 \
 topik; gabungkan obrolan kecil ke topik terdekat dan abaikan basa-basi.
@@ -77,6 +82,11 @@ class Correction(BaseModel):
     correct: str = Field(description="Teks yang benar")
 
 
+class Highlight(BaseModel):
+    time: str = Field(description="Waktu yang ditandai pengguna, mis. 12:30")
+    summary: str = Field(description="Apa yang dibahas/diputuskan di sekitar waktu itu")
+
+
 class MeetingSummary(BaseModel):
     corrections: list[Correction] = Field(description="Koreksi salah dengar pada transkrip")
     glossary_terms: list[str] = Field(description="Istilah penting dari rapat ini, ejaan benar")
@@ -86,6 +96,7 @@ class MeetingSummary(BaseModel):
     agenda: list[AgendaItem] = Field(description="Pembahasan per agenda, urut sesuai waktu")
     action_items: list[ActionItem] = Field(description="Tindak lanjut")
     open_questions: list[str] = Field(description="Pertanyaan atau isu yang belum terjawab")
+    highlights: list[Highlight] = Field(description="Ringkasan untuk tiap momen penting yang ditandai pengguna")
 
     @property
     def decisions(self) -> list[str]:
@@ -97,12 +108,12 @@ class Summarizer:
         self.model = model
         self.client = anthropic.Anthropic()
 
-    def summarize(self, transcript: str, glossary: list[str] = ()) -> MeetingSummary:
+    def summarize(self, transcript: str, glossary: list[str] = (), marks: list[float] = ()) -> MeetingSummary:
         response = self.client.beta.messages.parse(
             model=self.model,
             max_tokens=16000,
             system=SYSTEM_PROMPT,
-            messages=[{"role": "user", "content": _build_input(transcript, list(glossary))}],
+            messages=[{"role": "user", "content": _build_input(transcript, list(glossary), list(marks))}],
             output_format=MeetingSummary,
             output_config={"effort": "medium"},
             # Jika permintaan ditolak oleh safety classifier, API otomatis mencoba model cadangan.
@@ -116,9 +127,12 @@ class Summarizer:
         return response.parsed_output
 
 
-def _build_input(transcript: str, glossary: list[str]) -> str:
+def _build_input(transcript: str, glossary: list[str], marks: list[float] = ()) -> str:
     terms = ", ".join(glossary) or "(masih kosong)"
-    return f"<kamus>\n{terms}\n</kamus>\n\n<transkrip>\n{transcript}\n</transkrip>"
+    text = f"<kamus>\n{terms}\n</kamus>\n\n<transkrip>\n{transcript}\n</transkrip>"
+    if marks:
+        text += f"\n\n<momen_penting>\n{', '.join(format_timestamp(m) for m in marks)}\n</momen_penting>"
+    return text
 
 
 class ClaudeCodeSummarizer:
@@ -127,7 +141,7 @@ class ClaudeCodeSummarizer:
         self.model = model
         self.timeout = timeout
 
-    def summarize(self, transcript: str, glossary: list[str] = ()) -> MeetingSummary:
+    def summarize(self, transcript: str, glossary: list[str] = (), marks: list[float] = ()) -> MeetingSummary:
         cmd = [
             self.executable, "-p", "Buat notulen dari transkrip rapat yang diberikan.",
             "--output-format", "json",
@@ -141,7 +155,7 @@ class ClaudeCodeSummarizer:
         # Tanpa API key di environment, Claude Code memakai login langganan (claude.ai).
         env = {k: v for k, v in os.environ.items() if k not in {"ANTHROPIC_API_KEY", "ANTHROPIC_AUTH_TOKEN"}}
         proc = subprocess.run(
-            cmd, input=_build_input(transcript, list(glossary)), capture_output=True, text=True,
+            cmd, input=_build_input(transcript, list(glossary), list(marks)), capture_output=True, text=True,
             timeout=self.timeout, env=env, cwd=tempfile.gettempdir(),
         )
         try:

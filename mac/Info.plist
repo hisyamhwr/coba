@@ -1,0 +1,36 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+    <key>CFBundleDevelopmentRegion</key>
+    <string>id</string>
+    <key>CFBundleExecutable</key>
+    <string>MeetingNotes</string>
+    <key>CFBundleIdentifier</key>
+    <string>com.hisyamhwr.meetingnotes</string>
+    <key>CFBundleName</key>
+    <string>Meeting Notes</string>
+    <key>CFBundleDisplayName</key>
+    <string>Meeting Notes</string>
+    <key>CFBundlePackageType</key>
+    <string>APPL</string>
+    <key>CFBundleShortVersionString</key>
+    <string>__VERSION__</string>
+    <key>CFBundleVersion</key>
+    <string>__VERSION__</string>
+    <key>LSMinimumSystemVersion</key>
+    <string>14.0</string>
+    <key>LSUIElement</key>
+    <true/>
+    <key>NSMicrophoneUsageDescription</key>
+    <string>Meeting Notes merekam suara rapat untuk dibuat notulennya.</string>
+    <key>NSSpeechRecognitionUsageDescription</key>
+    <string>Meeting Notes menampilkan transkrip live selama rapat.</string>
+    <key>NSAudioCaptureUsageDescription</key>
+    <string>Meeting Notes merekam suara peserta Zoom, Meet, atau Teams untuk notulen.</string>
+    <key>MNPythonPath</key>
+    <string>__PYTHON__</string>
+    <key>MNRepoPath</key>
+    <string>__REPO__</string>
+</dict>
+</plist>
