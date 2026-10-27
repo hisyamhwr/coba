@@ -81,10 +81,20 @@ def _normalize(text: str) -> str:
     return re.sub(r"[^\w\s]", "", text.lower()).strip()
 
 
+# Frasa 1-6 kata yang muncul 4 kali atau lebih berturut-turut ("mengalokasikan dan mengalokasikan dan ...").
+_REPEAT = re.compile(r"\b(\w+(?:\W+\w+){0,5}?)(?:\W+\1\b){3,}", re.IGNORECASE)
+
+
+def collapse_repeats(text: str) -> str:
+    """Whisper kadang 'macet' mengulang frasa saat pembicara diam; sisakan satu saja."""
+    return _REPEAT.sub(r"\1", text)
+
+
 def clean_segments(segments: list[Segment]) -> list[Segment]:
     """Buang halusinasi Whisper dan baris yang terulang beruntun."""
     result: list[Segment] = []
     for seg in segments:
+        seg = Segment(seg.start, seg.end, collapse_repeats(seg.text).strip())
         norm = _normalize(seg.text)
         if not norm:
             continue
@@ -139,6 +149,8 @@ class _FasterWhisperEngine:
             self._model = WhisperModel(self.model_size, device="auto", compute_type="int8")
         segments, _ = self._model.transcribe(
             audio, language=self.language, initial_prompt=prompt, vad_filter=True, beam_size=5,
+            # Lewati bagian sunyi yang memicu halusinasi (butuh word_timestamps).
+            word_timestamps=True, hallucination_silence_threshold=2.0,
         )
         return [Segment(s.start, s.end, s.text.strip()) for s in segments]
 
@@ -160,6 +172,8 @@ class _MlxEngine:
             audio, path_or_hf_repo=self.repo, language=self.language, initial_prompt=prompt,
             # Mencegah Whisper mengulang kalimat yang sama terus-menerus pada rapat panjang.
             condition_on_previous_text=False,
+            # Lewati bagian sunyi yang memicu halusinasi (butuh word_timestamps).
+            word_timestamps=True, hallucination_silence_threshold=2.0,
         )
         return [
             Segment(s["start"], s["end"], s["text"].strip())

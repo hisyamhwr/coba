@@ -2,6 +2,13 @@
 
 Format versi: `MAYOR.FITUR.PERBAIKAN` (lihat [docs/ROADMAP.md](docs/ROADMAP.md)).
 
+## 1.1.2
+
+- Transkrip: frasa yang terulang-ulang saat pembicara diam ("mengalokasikan dan mengalokasikan dan ...")
+  diringkas menjadi satu, dan Whisper melewati bagian sunyi yang memicu halusinasi.
+- Koreksi: Claude mengutamakan kemiripan bunyi dan topik rapat (mis. "store turner" → "setor tunai",
+  bukan "store tertentu"), dan tidak lagi menambahkan kata yang tidak diucapkan.
+
 ## 1.1.1
 
 - Widget: gagal mengunduh model Whisper tidak lagi menimpa status "Mendengarkan rapat...".

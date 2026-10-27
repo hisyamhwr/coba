@@ -27,6 +27,7 @@ from meeting_notes.transcriber import (
     Transcriber,
     chunk_bounds,
     clean_segments,
+    collapse_repeats,
     format_timestamp,
     to_paragraphs,
 )
@@ -113,6 +114,16 @@ def test_clean_segments_drops_hallucinations_and_repeats():
         Segment(4, 5, "..."),
     ]
     assert [s.text for s in clean_segments(segs)] == ["Halo semua.", "Kita bahas budget."]
+
+
+def test_collapse_repeats_when_whisper_gets_stuck():
+    stuck = "yang mengalokasikan dan " + "mengalokasikan dan " * 40
+    assert collapse_repeats(stuck) == "yang mengalokasikan dan "
+    assert collapse_repeats("ya ya ya ya ya") == "ya"
+    # Pengulangan wajar dalam percakapan tidak diubah.
+    assert collapse_repeats("oke oke kita mulai, sangat sangat penting") == "oke oke kita mulai, sangat sangat penting"
+    loop = [Segment(0, 30, "aku sempat " + "mengecek dan " * 30)]
+    assert clean_segments(loop)[0].text == "aku sempat mengecek dan"
 
 
 def test_chunk_bounds_cut_at_quietest_point():
