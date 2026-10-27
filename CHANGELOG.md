@@ -1,0 +1,28 @@
+# Changelog
+
+Format versi: `MAYOR.FITUR.PERBAIKAN` (lihat [docs/ROADMAP.md](docs/ROADMAP.md)).
+
+## 1.1.1
+
+- Widget: gagal mengunduh model Whisper tidak lagi menimpa status "Mendengarkan rapat...".
+- Widget: jika pemrosesan gagal, rekaman tetap aman dan tombol **Buka folder rekaman** muncul.
+- MoM: penugasan tidak lagi ikut tertulis sebagai keputusan.
+- MoM: orang yang hanya disebut namanya tidak lagi dicatat sebagai peserta.
+
+## 1.1.0
+
+- Claude otomatis mengoreksi kata yang salah dengar (mis. "girlfriend" → "frontend", "PoIP" → "VoIP").
+- Kamus istilah yang belajar sendiri (`~/MeetingNotes/kamus.txt`) dan dipakai Whisper serta Claude di rapat berikutnya.
+- Lampiran "Koreksi Otomatis" di notulen.
+
+## 1.0.2
+
+- Whisper `large-v3-turbo`, berjalan di GPU Mac (MLX) pada Mac M1/M2/...
+- Transkripsi per potongan ±10 menit, bagian sunyi dilewati, halusinasi Whisper dibuang.
+- Transkrip dirapikan menjadi paragraf dan dipindah ke lampiran.
+- MoM baru: ringkasan eksekutif, keputusan utama, action items bernomor, pembahasan per agenda dengan waktu mulai.
+- PyAV dikunci di bawah versi 19 karena versi 19 merusak pembacaan audio.
+
+## 1.0.1
+
+- MVP: widget, rekam mikrofon + audio sistem, transkripsi lokal, ringkasan via Claude Pro (Claude Code) atau API, ekspor .md dan .docx.

@@ -39,7 +39,10 @@ Langkah 3 - susun Minutes of Meeting (MoM) yang langsung ke inti:
 topik; gabungkan obrolan kecil ke topik terdekat dan abaikan basa-basi.
 - Poin pembahasan harus konkret: sebutkan angka, nama, tanggal, dan alasan bila ada. Hindari \
 kalimat umum seperti "tim berdiskusi tentang progres".
-- Keputusan hanya yang benar-benar disepakati, bukan sekadar usulan.
+- Keputusan hanya yang benar-benar disepakati, bukan sekadar usulan. Penugasan seseorang \
+("Rina tolong buat ...") adalah action item, bukan keputusan; jangan ditulis di keduanya.
+- Peserta hanya orang yang hadir atau berbicara. Orang yang sekadar disebut namanya \
+(mis. atasan yang dimintai persetujuan) jangan dimasukkan sebagai peserta.
 
 Tulis seluruh hasil dalam Bahasa Indonesia yang jelas dan ringkas. Istilah teknis atau nama \
 produk berbahasa Inggris boleh dipertahankan. Jangan mengarang informasi yang tidak ada di \

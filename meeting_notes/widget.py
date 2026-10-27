@@ -75,8 +75,8 @@ class MeetingWidget:
     def _download_model(self) -> None:
         try:
             self.transcriber.download()
-        except Exception as exc:  # noqa: BLE001
-            self.events.put(("status", f"Gagal mengunduh model Whisper: {exc}"))
+        except Exception:  # noqa: BLE001 - dicoba lagi otomatis saat rapat diproses
+            self.events.put(("download_failed", None))
 
     def toggle(self) -> None:
         if self.state == "idle":
@@ -129,15 +129,24 @@ class MeetingWidget:
             kind, payload = self.events.get()
             if kind == "status":
                 self.set_status(str(payload))
+            elif kind == "download_failed":
+                # Jangan menimpa status rekaman: rekaman tetap berjalan, model diunduh ulang saat diproses.
+                prefix = "Mendengarkan rapat... " if self.state == "recording" else ""
+                self.set_status(f"{prefix}(Model Whisper belum terunduh, cek internet. Akan dicoba lagi.)")
             elif kind == "done":
                 self.last_result_dir = payload.markdown_path.parent
                 note = f"\n{payload.note}" if payload.note else ""
                 self.set_status(f"Tersimpan: {payload.markdown_path.name}{note}")
                 self.reset()
+                self.open_button.configure(text="Buka folder notulen")
                 self.open_button.pack(pady=(6, 0))
             elif kind == "error":
-                self.set_status(f"Gagal: {payload}")
+                # Rekaman audio tetap aman; arahkan pengguna ke foldernya agar bisa diproses ulang.
+                self.last_result_dir = self.recorder.workdir if self.recorder else None
+                self.set_status(f"Gagal memproses: {payload}\nRekaman aman tersimpan, bisa diproses ulang.")
                 self.reset()
+                self.open_button.configure(text="Buka folder rekaman")
+                self.open_button.pack(pady=(6, 0))
 
         self.root.after(100, self._tick)
 
