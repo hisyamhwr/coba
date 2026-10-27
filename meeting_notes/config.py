@@ -41,3 +41,7 @@ class Settings:
     # Rekam juga suara dari speaker/headphone (peserta meeting online). Windows & Linux saja.
     capture_system_audio: bool = field(default_factory=lambda: _env_bool("CAPTURE_SYSTEM_AUDIO", True))
     sample_rate: int = 16000
+
+    @property
+    def glossary_path(self) -> Path:
+        return self.output_dir / "kamus.txt"

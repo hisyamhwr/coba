@@ -19,10 +19,21 @@ from .config import Settings
 
 SYSTEM_PROMPT = """\
 Kamu adalah notulen rapat yang teliti. Kamu menerima transkrip otomatis sebuah rapat yang \
-bahasanya campuran Indonesia dan Inggris. Transkrip bisa mengandung salah dengar, jadi pahami \
-maksudnya dari konteks.
+bahasanya campuran Indonesia dan Inggris, beserta kamus istilah yang sering dipakai pengguna.
 
-Susun Minutes of Meeting (MoM) yang langsung ke inti:
+Langkah 1 - koreksi salah dengar. Mesin transkripsi sering salah menangkap istilah, misalnya \
+"frontend" tertulis "girlfriend" atau "VoIP" tertulis "PoIP". Cari kata seperti ini dengan \
+memakai konteks kalimat dan kamus. Untuk setiap koreksi:
+- `wrong` disalin persis seperti tertulis di transkrip. Jika kata itu bisa benar di tempat lain, \
+sertakan kata di sekitarnya agar penggantiannya tepat sasaran.
+- `correct` adalah tulisan yang benar.
+Hanya koreksi yang kamu yakini. Jangan mengoreksi gaya bahasa, kata tidak baku, atau tata bahasa.
+
+Langkah 2 - catat istilah penting di `glossary_terms`: nama orang, produk, proyek, tim, istilah \
+teknis, dan singkatan dari rapat ini, dalam ejaan yang benar (maksimal 30). Ini dipakai untuk \
+membantu transkripsi rapat berikutnya.
+
+Langkah 3 - susun Minutes of Meeting (MoM) yang langsung ke inti:
 - Ringkasan eksekutif 3-5 kalimat: apa tujuan rapat, apa hasilnya.
 - Kelompokkan pembahasan per agenda/topik sesuai urutan waktu. Rapat panjang biasanya 3-10 \
 topik; gabungkan obrolan kecil ke topik terdekat dan abaikan basa-basi.
@@ -49,7 +60,14 @@ class AgendaItem(BaseModel):
     decisions: list[str] = Field(description="Keputusan yang disepakati dalam topik ini")
 
 
+class Correction(BaseModel):
+    wrong: str = Field(description="Teks salah dengar, disalin persis dari transkrip")
+    correct: str = Field(description="Teks yang benar")
+
+
 class MeetingSummary(BaseModel):
+    corrections: list[Correction] = Field(description="Koreksi salah dengar pada transkrip")
+    glossary_terms: list[str] = Field(description="Istilah penting dari rapat ini, ejaan benar")
     title: str = Field(description="Judul singkat rapat berdasarkan topik utamanya")
     executive_summary: str = Field(description="Ringkasan eksekutif 3-5 kalimat")
     participants: list[str] = Field(description="Nama peserta yang disebut di transkrip")
@@ -67,12 +85,12 @@ class Summarizer:
         self.model = model
         self.client = anthropic.Anthropic()
 
-    def summarize(self, transcript: str) -> MeetingSummary:
+    def summarize(self, transcript: str, glossary: list[str] = ()) -> MeetingSummary:
         response = self.client.beta.messages.parse(
             model=self.model,
             max_tokens=16000,
             system=SYSTEM_PROMPT,
-            messages=[{"role": "user", "content": _wrap_transcript(transcript)}],
+            messages=[{"role": "user", "content": _build_input(transcript, list(glossary))}],
             output_format=MeetingSummary,
             output_config={"effort": "medium"},
             # Jika permintaan ditolak oleh safety classifier, API otomatis mencoba model cadangan.
@@ -86,8 +104,9 @@ class Summarizer:
         return response.parsed_output
 
 
-def _wrap_transcript(transcript: str) -> str:
-    return f"<transkrip>\n{transcript}\n</transkrip>"
+def _build_input(transcript: str, glossary: list[str]) -> str:
+    terms = ", ".join(glossary) or "(masih kosong)"
+    return f"<kamus>\n{terms}\n</kamus>\n\n<transkrip>\n{transcript}\n</transkrip>"
 
 
 class ClaudeCodeSummarizer:
@@ -96,7 +115,7 @@ class ClaudeCodeSummarizer:
         self.model = model
         self.timeout = timeout
 
-    def summarize(self, transcript: str) -> MeetingSummary:
+    def summarize(self, transcript: str, glossary: list[str] = ()) -> MeetingSummary:
         cmd = [
             self.executable, "-p", "Buat notulen dari transkrip rapat yang diberikan.",
             "--output-format", "json",
@@ -110,7 +129,7 @@ class ClaudeCodeSummarizer:
         # Tanpa API key di environment, Claude Code memakai login langganan (claude.ai).
         env = {k: v for k, v in os.environ.items() if k not in {"ANTHROPIC_API_KEY", "ANTHROPIC_AUTH_TOKEN"}}
         proc = subprocess.run(
-            cmd, input=_wrap_transcript(transcript), capture_output=True, text=True,
+            cmd, input=_build_input(transcript, list(glossary)), capture_output=True, text=True,
             timeout=self.timeout, env=env, cwd=tempfile.gettempdir(),
         )
         try:

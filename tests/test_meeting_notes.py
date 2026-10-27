@@ -9,6 +9,7 @@ from docx import Document
 
 from meeting_notes.config import Settings
 from meeting_notes.exporter import MeetingInfo, render_markdown, write_docx
+from meeting_notes.glossary import Glossary, apply_corrections
 from meeting_notes.pipeline import process_recording
 from meeting_notes.recorder import mix_tracks
 from meeting_notes import summarizer as summarizer_module
@@ -16,6 +17,7 @@ from meeting_notes.summarizer import (
     ActionItem,
     AgendaItem,
     ClaudeCodeSummarizer,
+    Correction,
     MeetingSummary,
     Summarizer,
     make_summarizer,
@@ -31,6 +33,8 @@ from meeting_notes.transcriber import (
 
 SEGMENTS = [Segment(0, 4, "Oke kita mulai meeting-nya."), Segment(65, 70, "Budi follow up ke vendor Jumat.")]
 SUMMARY = MeetingSummary(
+    corrections=[],
+    glossary_terms=["Budi", "vendor"],
     title="Sinkronisasi Vendor",
     executive_summary="Tim membahas progres vendor.",
     participants=["Budi", "Sari"],
@@ -195,12 +199,13 @@ def test_claude_code_summarizer(monkeypatch):
         return SimpleNamespace(returncode=0, stdout=json.dumps(out), stderr="")
 
     monkeypatch.setattr(summarizer_module.subprocess, "run", fake_run)
-    result = ClaudeCodeSummarizer("claude", model="sonnet").summarize("[00:00] halo")
+    result = ClaudeCodeSummarizer("claude", model="sonnet").summarize("[00:00] halo", ["VoIP"])
     assert result == SUMMARY
     assert calls["cmd"][:2] == ["claude", "-p"]
     assert calls["cmd"][-2:] == ["--model", "sonnet"]
     assert "ANTHROPIC_API_KEY" not in calls["env"]
-    assert calls["input"] == "<transkrip>\n[00:00] halo\n</transkrip>"
+    assert calls["input"].startswith("<kamus>\nVoIP\n</kamus>")
+    assert calls["input"].endswith("<transkrip>\n[00:00] halo\n</transkrip>")
 
 
 def test_claude_code_summarizer_reports_login_error(monkeypatch):
@@ -215,11 +220,77 @@ def test_claude_code_summarizer_reports_login_error(monkeypatch):
 
 def test_pipeline_with_summary(tmp_path, monkeypatch):
     monkeypatch.setenv("ANTHROPIC_API_KEY", "test")
-    monkeypatch.setattr(Summarizer, "summarize", lambda self, transcript: SUMMARY)
+    monkeypatch.setattr(Summarizer, "summarize", lambda self, transcript, glossary=(): SUMMARY)
     settings = Settings(output_dir=tmp_path / "out")
     result = process_recording(_audio(tmp_path), settings, INFO.started_at, lambda _: None, FakeTranscriber())
     assert result.markdown_path.name == "2026-10-27_0930_sinkronisasi-vendor.md"
     assert result.note is None
+
+
+def test_render_lists_corrections():
+    md = render_markdown(INFO, SEGMENTS, SUMMARY, corrections={("girlfriend", "frontend"): 2})
+    assert "## Lampiran: Koreksi Otomatis" in md
+    assert "| girlfriend | frontend | 2 |" in md
+
+
+def test_apply_corrections():
+    text = "Yang bikin start girlfriend-nya doang. PoIP dari Daily Banking. Girlfriend saya bukan programmer."
+    fixed, counts = apply_corrections(
+        text, [("start girlfriend", "start frontend"), ("PoIP", "VoIP"), ("", "x"), ("ip", "ip")]
+    )
+    assert fixed == "Yang bikin start frontend-nya doang. VoIP dari Daily Banking. Girlfriend saya bukan programmer."
+    assert counts == {("start girlfriend", "start frontend"): 1, ("PoIP", "VoIP"): 1}
+    # Kata utuh saja: "api" tidak boleh mengganti bagian dari "kapital".
+    assert apply_corrections("api dan kapital", [("api", "API")])[0] == "API dan kapital"
+    # Koreksi huruf besar/kecil dicocokkan persis.
+    assert apply_corrections("voip dan Voip", [("voip", "VoIP")])[0] == "VoIP dan Voip"
+
+
+def test_glossary_learns_and_prioritizes_recent_terms(tmp_path):
+    path = tmp_path / "kamus.txt"
+    g = Glossary(path)
+    g.merge(["VoIP", "frontend"])
+    g.save()
+    g = Glossary(path)
+    g.merge(["Daily Banking", "voip", " "])
+    assert g.terms == ["Daily Banking", "voip", "frontend"]
+    g.save()
+    assert path.read_text(encoding="utf-8").startswith("# Kamus")
+    assert Glossary(path).terms == ["Daily Banking", "voip", "frontend"]
+    assert g.whisper_hint(max_chars=30) == "Daily Banking, voip"
+
+
+def test_transcriber_prompt_includes_vocabulary():
+    t = Transcriber(engine="faster-whisper")
+    assert "Istilah" not in t.prompt()
+    t.vocabulary = "VoIP, frontend"
+    assert t.prompt().endswith("Istilah: VoIP, frontend.")
+
+
+def test_pipeline_applies_corrections_and_updates_glossary(tmp_path, monkeypatch):
+    monkeypatch.setenv("ANTHROPIC_API_KEY", "test")
+    summary = SUMMARY.model_copy(update={
+        "corrections": [Correction(wrong="follow up ke vendor", correct="follow up ke vendor VoIP")],
+        "glossary_terms": ["VoIP"],
+    })
+    seen = {}
+
+    def fake_summarize(self, transcript, glossary=()):
+        seen["glossary"] = list(glossary)
+        return summary
+
+    monkeypatch.setattr(Summarizer, "summarize", fake_summarize)
+    settings = Settings(output_dir=tmp_path / "out")
+    settings.output_dir.mkdir()
+    settings.glossary_path.write_text("Daily Banking\n", encoding="utf-8")
+    transcriber = FakeTranscriber()
+    result = process_recording(_audio(tmp_path), settings, INFO.started_at, lambda _: None, transcriber)
+    md = result.markdown_path.read_text(encoding="utf-8")
+    assert "Budi follow up ke vendor VoIP Jumat." in md
+    assert "| follow up ke vendor | follow up ke vendor VoIP | 1 |" in md
+    assert seen["glossary"] == ["Daily Banking"]
+    assert transcriber.vocabulary == "Daily Banking"
+    assert Glossary(settings.glossary_path).terms == ["VoIP", "Daily Banking"]
 
 
 def test_summarizer_request(monkeypatch):
@@ -235,4 +306,5 @@ def test_summarizer_request(monkeypatch):
     assert summarizer.summarize("[00:00] halo") is SUMMARY
     assert calls["model"] == "claude-opus-5-5"
     assert calls["output_format"] is MeetingSummary
-    assert "<transkrip>\n[00:00] halo\n</transkrip>" in calls["messages"][0]["content"]
+    expected = "<kamus>\n(masih kosong)\n</kamus>\n\n<transkrip>\n[00:00] halo\n</transkrip>"
+    assert calls["messages"][0]["content"] == expected

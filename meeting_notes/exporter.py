@@ -24,12 +24,16 @@ def _title(info: MeetingInfo, summary: MeetingSummary | None) -> str:
     return summary.title if summary else f"Rapat {info.started_at:%d-%m-%Y}"
 
 
+Corrections = dict[tuple[str, str], int]
+
+
 def _bullets(items: list[str]) -> list[str]:
     return [f"- {item}" for item in items] or ["- -"]
 
 
 def render_markdown(
-    info: MeetingInfo, paragraphs: list[Segment], summary: MeetingSummary | None, note: str | None = None
+    info: MeetingInfo, paragraphs: list[Segment], summary: MeetingSummary | None, note: str | None = None,
+    corrections: Corrections | None = None,
 ) -> str:
     lines = [
         f"# {_title(info, summary)}",
@@ -68,12 +72,17 @@ def render_markdown(
         lines += [f"**[{format_timestamp(p.start)}]** {p.text}", ""]
     if not paragraphs:
         lines += ["_(tidak ada suara terdeteksi)_", ""]
+    if corrections:
+        lines += ["## Lampiran: Koreksi Otomatis", "", "| Tertulis | Dikoreksi menjadi | Jumlah |", "|---|---|---|"]
+        lines += [f"| {wrong} | {correct} | {n} |" for (wrong, correct), n in corrections.items()]
+        lines.append("")
     lines += ["---", f"_{FOOTER}_"]
     return "\n".join(lines) + "\n"
 
 
 def write_docx(
-    path: Path, info: MeetingInfo, paragraphs: list[Segment], summary: MeetingSummary | None, note: str | None = None
+    path: Path, info: MeetingInfo, paragraphs: list[Segment], summary: MeetingSummary | None, note: str | None = None,
+    corrections: Corrections | None = None,
 ) -> Path:
     doc = Document()
     doc.add_heading(_title(info, summary), level=0)
@@ -126,6 +135,16 @@ def write_docx(
         para.add_run(p.text)
     if not paragraphs:
         doc.add_paragraph("(tidak ada suara terdeteksi)")
+    if corrections:
+        doc.add_heading("Lampiran: Koreksi Otomatis", level=1)
+        table = doc.add_table(rows=1, cols=3)
+        table.style = "Table Grid"
+        for cell, text in zip(table.rows[0].cells, ["Tertulis", "Dikoreksi menjadi", "Jumlah"], strict=True):
+            cell.text = text
+            cell.paragraphs[0].runs[0].bold = True
+        for (wrong, correct), n in corrections.items():
+            for cell, text in zip(table.add_row().cells, [wrong, correct, str(n)], strict=True):
+                cell.text = text
     doc.sections[0].footer.paragraphs[0].text = FOOTER
 
     doc.save(path)

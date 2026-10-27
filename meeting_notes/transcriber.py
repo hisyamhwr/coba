@@ -174,6 +174,8 @@ class Transcriber:
         chunk_seconds: int = CHUNK_SECONDS,
     ):
         self.chunk_seconds = chunk_seconds
+        # Istilah dari kamus otomatis, dipakai sebagai petunjuk ejaan untuk Whisper.
+        self.vocabulary = ""
         use_mlx = engine == "mlx" or (engine == "auto" and is_apple_silicon())
         self.engine = (_MlxEngine if use_mlx else _FasterWhisperEngine)(model_size, language)
 
@@ -182,7 +184,7 @@ class Transcriber:
         self.engine.download()
 
     def prompt(self) -> str:
-        return BASE_PROMPT
+        return f"{BASE_PROMPT} Istilah: {self.vocabulary}." if self.vocabulary else BASE_PROMPT
 
     def transcribe(self, audio: np.ndarray, on_progress: Callable[[float], None] | None = None) -> list[Segment]:
         bounds = chunk_bounds(audio, chunk_seconds=self.chunk_seconds)

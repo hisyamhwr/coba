@@ -97,7 +97,20 @@ python -m meeting_notes proses rekaman-rapat.m4a
 4. Action items (tugas, penanggung jawab, tenggat)
 5. Pembahasan per agenda, lengkap dengan waktu mulai tiap topik
 6. Pertanyaan terbuka
-7. Lampiran: transkrip lengkap, dirapikan menjadi paragraf
+7. Lampiran: transkrip lengkap, dirapikan menjadi paragraf dan sudah dikoreksi
+8. Lampiran: daftar koreksi otomatis (mis. "girlfriend" → "frontend")
+
+## Transkrip makin akurat dengan sendirinya
+
+Kamu tidak perlu mengisi kamus apa pun. Setiap selesai rapat:
+
+1. Claude membetulkan kata yang salah dengar dari konteks, mis. "PoIP" → "VoIP".
+2. Istilah penting dari rapat itu (nama orang, produk, istilah teknis) disimpan ke
+   `~/MeetingNotes/kamus.txt`.
+3. Di rapat berikutnya, kamus itu diberikan ke Whisper dan Claude sehingga istilahmu dikenali
+   sejak awal.
+
+`kamus.txt` adalah file teks biasa; boleh diedit manual bila ada istilah yang terus salah.
 
 ## Pengaturan (`.env`)
 
