@@ -2,6 +2,12 @@
 
 Format versi: `MAYOR.FITUR.PERBAIKAN` (lihat [docs/ROADMAP.md](docs/ROADMAP.md)).
 
+## 2.0.5
+
+- Aplikasi Mac: bila pemrosesan gagal, pulau menampilkan inti error (baris terakhir) yang bisa diseleksi/disalin,
+  dan log lengkap disimpan ke `proses.log` di folder rekaman.
+- Python dijalankan seperti setelah `conda activate` (PATH dan CONDA_PREFIX environment).
+
 ## 2.0.4
 
 - Animasi lebih mulus dan responsif:

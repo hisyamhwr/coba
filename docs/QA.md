@@ -13,6 +13,7 @@ pesan galat/screenshot di langkah pertama yang gagal. Bug diperbaiki sebagai 2.0
 | 4 | Bicara 1 menit | Transkrip live muncul dan ikut berubah; gelombang suara bergerak |
 | 5 | Klik **Tandai penting** 2x | Chip menjadi "Tandai penting (2)" |
 | 6 | Tekan ⌃⌥M | Rekaman berhenti, status berpindah ke "Memproses" |
+| 7a | (Temuan 2.0.4) Pemrosesan gagal di `pipeline.py` baris 11 (`import soundfile`) saat dijalankan dari aplikasi | 2.0.5: tampilkan inti error + `proses.log`; jalankan Python seperti `conda activate` |
 | 7 | Tunggu | Kartu "MoM siap" + notifikasi; **Buka MoM** membuka MoM (.md, atau .docx bila "Buat juga Word" dicentang) berisi "Momen Penting" |
 | 8 | Izinkan Screen & System Audio Recording, buka ulang app, putar video YouTube sambil merekam **dengan headphone** | Suara video ikut tertranskrip di MoM |
 | 9 | Meeting Zoom/Meet sungguhan ≥ 15 menit | Suara peserta lain dan suaramu tercatat; MoM per agenda |

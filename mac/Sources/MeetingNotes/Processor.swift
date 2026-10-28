@@ -37,8 +37,11 @@ final class Processor {
         // Aplikasi yang dibuka dari Finder tidak membawa PATH terminal; tambahkan lokasi umum `claude`.
         var env = ProcessInfo.processInfo.environment
         let home = FileManager.default.homeDirectoryForCurrentUser.path
-        env["PATH"] = ["\(home)/.local/bin", "/opt/homebrew/bin", "/usr/local/bin", env["PATH"] ?? "/usr/bin:/bin"]
-            .joined(separator: ":")
+        // Tiru "conda activate": folder bin environment di depan PATH dan CONDA_PREFIX terisi.
+        let envBin = URL(fileURLWithPath: Config.pythonPath).deletingLastPathComponent()
+        env["CONDA_PREFIX"] = envBin.deletingLastPathComponent().path
+        env["PATH"] = [envBin.path, "\(home)/.local/bin", "/opt/homebrew/bin", "/usr/local/bin",
+                       env["PATH"] ?? "/usr/bin:/bin"].joined(separator: ":")
         env["PYTHONUNBUFFERED"] = "1"
         process.environment = env
 
@@ -66,7 +69,7 @@ final class Processor {
         stderr.fileHandleForReading.readabilityHandler = { [weak self] handle in
             let data = handle.availableData
             guard let self, !data.isEmpty, let text = String(data: data, encoding: .utf8) else { return }
-            self.stderrTail = String((self.stderrTail + text).suffix(600))
+            self.stderrTail = String((self.stderrTail + text).suffix(20_000))
         }
 
         process.terminationHandler = { [weak self] proc in
@@ -83,8 +86,12 @@ final class Processor {
             if let result = self.result, proc.terminationStatus == 0 {
                 onFinish(.success(result))
             } else {
-                let detail = self.stderrTail.split(separator: "\n").suffix(3).joined(separator: "\n")
-                onFinish(.failure(ProcessorError.failed(detail.isEmpty ? "Pemrosesan gagal." : detail)))
+                // Simpan log lengkap di folder rekaman; tampilkan inti error (baris terakhir traceback).
+                let log = audio.deletingLastPathComponent().appendingPathComponent("proses.log")
+                try? self.stderrTail.write(to: log, atomically: true, encoding: .utf8)
+                let lastLine = self.stderrTail.split(separator: "\n").last { !$0.trimmingCharacters(in: .whitespaces).isEmpty }
+                let detail = lastLine.map { String($0).trimmingCharacters(in: .whitespaces) } ?? "Pemrosesan gagal."
+                onFinish(.failure(ProcessorError.failed("\(detail)\nLog lengkap: proses.log di folder rekaman.")))
             }
         }
 

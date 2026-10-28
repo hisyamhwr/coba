@@ -168,7 +168,7 @@ final class MeetingController {
             state.phase = .done
             notify(title: "MoM siap", body: result.title)
         case .failure(let error):
-            fail("\(error.localizedDescription)\nRekaman aman di folder rekaman.", dir: dir)
+            fail(error.localizedDescription, dir: dir)
             notify(title: "Gagal memproses rapat", body: "Rekaman aman, bisa diproses ulang.")
         }
     }

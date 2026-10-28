@@ -268,6 +268,7 @@ struct IslandView: View {
                 closeButton { controller.dismiss() }
             }
             Text(state.errorMessage).font(.system(size: 12)).foregroundStyle(Palette.muted).lineLimit(3)
+                .textSelection(.enabled)
             chip("Buka folder rekaman", icon: "folder") { controller.openFolder() }
         }
     }
