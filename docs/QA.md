@@ -15,6 +15,7 @@ pesan galat/screenshot di langkah pertama yang gagal. Bug diperbaiki sebagai 2.0
 | 6 | Tekan ⌃⌥M | Rekaman berhenti, status berpindah ke "Memproses" |
 | 7a | (Temuan 2.0.4–2.0.6) Pemrosesan gagal: `No module named 'soundfile'`; library terpasang di Python conda "base", bukan env `meeting` | 2.0.7: `build.sh` memasang library ke Python aplikasi; tombol **Proses ulang** |
 | 7b | (Temuan 2.0.7) MoM jadi, tetapi rekaman hening: suara sendiri dan peserta meeting tidak terekam | 2.0.8: izin macOS tersangkut setelah build ulang → tanda tangan berbasis bundle ID, reset izin, peringatan hening, `rekaman.log` |
+| 7c | (Temuan 2.0.8) Meeting Teams: pulau tetap "Meeting Notes" (tidak merekam), tidak ada transkrip live | 2.0.9: rekaman mic tidak lagi menunggu izin audio sistem; status "Menyiapkan..."; langkah tercatat di `rekaman.log` |
 | 7 | Tunggu | Kartu "MoM siap" + notifikasi; **Buka MoM** membuka MoM (.md, atau .docx bila "Buat juga Word" dicentang) berisi "Momen Penting" |
 | 8 | Izinkan Screen & System Audio Recording, buka ulang app, putar video YouTube sambil merekam **dengan headphone** | Suara video ikut tertranskrip di MoM |
 | 9 | Meeting Zoom/Meet sungguhan ≥ 15 menit | Suara peserta lain dan suaramu tercatat; MoM per agenda |

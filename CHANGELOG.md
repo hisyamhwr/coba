@@ -2,6 +2,14 @@
 
 Format versi: `MAYOR.FITUR.PERBAIKAN` (lihat [docs/ROADMAP.md](docs/ROADMAP.md)).
 
+## 2.0.9
+
+- Mulai merekam tidak lagi tertahan menunggu izin Screen & System Audio Recording: mic langsung merekam dan timer
+  berjalan; audio meeting menyusul. Sebelumnya pulau bisa diam di "Meeting Notes" tanpa merekam apa pun.
+- Pulau menampilkan "Menyiapkan..." selama menyiapkan rekaman, dan "Menunggu izin ..." bila audio meeting belum
+  diizinkan setelah 4 detik.
+- `rekaman.log` mencatat setiap langkah (klik Mulai, izin mic, mic mulai, audio sistem mulai/gagal, ringkasan).
+
 ## 2.0.8
 
 - Perbaikan rekaman hening (suara sendiri dan peserta meeting tidak terekam): izin Microphone dan Screen & System

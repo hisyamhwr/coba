@@ -63,8 +63,30 @@ final class AudioCapture: NSObject, SCStreamOutput, SCStreamDelegate {
         await AVCaptureDevice.requestAccess(for: .audio)
     }
 
-    /// Mulai merekam. Mengembalikan peringatan jika audio sistem tidak bisa direkam.
-    func start() async throws -> String? {
+    private var logURL: URL { output.deletingLastPathComponent().appendingPathComponent("rekaman.log") }
+
+    /// Tambahkan satu baris bertanda waktu ke rekaman.log, agar langkah yang macet terlihat.
+    func note(_ line: String) {
+        let stamp = Self.logTime.string(from: Date())
+        let data = Data("\(stamp)  \(line)\n".utf8)
+        if let handle = try? FileHandle(forWritingTo: logURL) {
+            handle.seekToEndOfFile()
+            handle.write(data)
+            try? handle.close()
+        } else {
+            try? data.write(to: logURL)
+        }
+    }
+
+    private static let logTime: DateFormatter = {
+        let formatter = DateFormatter()
+        formatter.dateFormat = "HH:mm:ss"
+        return formatter
+    }()
+
+    /// Mulai merekam mikrofon. Audio sistem dimulai terpisah lewat `startSystem()` agar menunggu izin
+    /// Screen & System Audio Recording tidak menahan rekaman.
+    func start() throws {
         file = try AVAudioFile(
             forWriting: output,
             settings: [
@@ -87,12 +109,18 @@ final class AudioCapture: NSObject, SCStreamOutput, SCStreamDelegate {
         ) { [weak self] _ in
             self?.restartMic()
         }
+        note("Mic mulai: \(micName) (\(micFormatText))")
+    }
 
+    /// Mulai merekam audio Zoom/Meet/Teams. Mengembalikan peringatan jika tidak bisa.
+    func startSystem() async -> String? {
         do {
             try await startSystemAudio()
             systemAudioActive = true
+            note("Audio sistem mulai")
             return nil
         } catch {
+            note("Audio sistem gagal: \(error.localizedDescription)")
             return "Audio Zoom/Meet/Teams belum terekam. Izinkan Meeting Notes di System Settings → Privacy & "
                 + "Security → Screen & System Audio Recording, lalu buka ulang aplikasi."
         }
@@ -110,8 +138,7 @@ final class AudioCapture: NSObject, SCStreamOutput, SCStreamDelegate {
         }
         scStream = nil
         writeQueue.sync { file = nil }
-        let log = output.deletingLastPathComponent().appendingPathComponent("rekaman.log")
-        try? diagnostics().write(to: log, atomically: true, encoding: .utf8)
+        note("Selesai\n" + diagnostics())
     }
 
     /// Ringkasan kondisi rekaman untuk rekaman.log.
@@ -235,6 +262,11 @@ final class AudioCapture: NSObject, SCStreamOutput, SCStreamDelegate {
         try newStream.addStreamOutput(self, type: .audio, sampleHandlerQueue: systemQueue)
         try newStream.addStreamOutput(self, type: .screen, sampleHandlerQueue: systemQueue)
         try await newStream.startCapture()
+        // Rekaman bisa saja sudah dihentikan selagi menunggu izin.
+        guard running else {
+            try? await newStream.stopCapture()
+            return
+        }
         scStream = newStream
     }
 

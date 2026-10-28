@@ -127,8 +127,13 @@ struct IslandView: View {
 
     private var idleCompact: some View {
         HStack(spacing: 8) {
-            Image(systemName: "mic.fill").foregroundStyle(Palette.green)
-            Text("Meeting Notes").font(.system(size: 12, weight: .semibold))
+            if state.starting {
+                ProgressView().controlSize(.mini)
+                Text("Menyiapkan...").font(.system(size: 12, weight: .semibold))
+            } else {
+                Image(systemName: "mic.fill").foregroundStyle(Palette.green)
+                Text("Meeting Notes").font(.system(size: 12, weight: .semibold))
+            }
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
         .contentShape(Rectangle())
@@ -146,7 +151,7 @@ struct IslandView: View {
                 closeButton(action: collapse)
             }
             HStack(spacing: 8) {
-                chip("Mulai Catat", icon: "record.circle", color: Palette.green, filled: true) { controller.start() }
+                chip(state.starting ? "Menyiapkan..." : "Mulai Catat", icon: "record.circle", color: Palette.green, filled: true) { controller.start() }
                 chip("Folder", icon: "folder") { controller.openFolder() }
             }
             Toggle("Buat juga Word (.docx)", isOn: $state.exportDocx)

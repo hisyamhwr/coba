@@ -26,6 +26,7 @@ final class MeetingController {
     }
 
     func start() {
+        guard !state.starting else { return }
         let started = Date()
         let stamp = Self.stampFormatter.string(from: started)
         let dir = Config.outputDir.appendingPathComponent("rekaman").appendingPathComponent(stamp)
@@ -52,32 +53,55 @@ final class MeetingController {
             Task { @MainActor in self?.state.warning = message }
         }
 
+        state.starting = true
+        state.errorMessage = ""
+        capture.note("Mulai Catat diklik")
         Task { @MainActor in
             guard await AudioCapture.requestMicAccess() else {
+                capture.note("Izin mikrofon ditolak")
+                self.state.starting = false
                 self.fail("Izin mikrofon ditolak. Buka System Settings → Privacy & Security → Microphone.", dir: dir)
                 return
             }
             do {
-                let warning = try await capture.start()
-                self.capture = capture
-                self.live = live
-                self.startedAt = started
-                self.state.recordingDir = dir
-                self.state.micName = capture.micName
-                self.state.warning = warning
-                self.state.marks = []
-                self.meter.elapsed = 0
-                self.meter.level = 0
-                self.meter.liveText = live == nil ? "Transkrip live dimatikan (hemat baterai)." : ""
-                self.state.result = nil
-                self.state.phase = .recording
-                self.state.expanded = true
-                live?.start()
-                self.timer = Timer.scheduledTimer(withTimeInterval: 1, repeats: true) { [weak self] _ in
-                    Task { @MainActor in self?.tick() }
-                }
+                try capture.start()
             } catch {
+                capture.note("Gagal mulai: \(error.localizedDescription)")
+                self.state.starting = false
                 self.fail("Gagal mulai merekam: \(error.localizedDescription)", dir: dir)
+                return
+            }
+            self.state.starting = false
+            self.capture = capture
+            self.live = live
+            self.startedAt = started
+            self.state.recordingDir = dir
+            self.state.micName = capture.micName
+            self.state.warning = nil
+            self.state.marks = []
+            self.meter.elapsed = 0
+            self.meter.level = 0
+            self.meter.liveText = live == nil ? "Transkrip live dimatikan (hemat baterai)." : ""
+            self.state.result = nil
+            self.state.phase = .recording
+            self.state.expanded = true
+            live?.start()
+            self.timer = Timer.scheduledTimer(withTimeInterval: 1, repeats: true) { [weak self] _ in
+                Task { @MainActor in self?.tick() }
+            }
+            // Audio sistem menyusul tanpa menahan rekaman mic (izinnya bisa membuka dialog macOS).
+            Task { @MainActor in
+                try? await Task.sleep(nanoseconds: 4_000_000_000)
+                if self.capture === capture, !capture.systemAudioActive, self.state.warning == nil {
+                    self.state.warning = "Menunggu izin Screen & System Audio Recording untuk suara meeting..."
+                }
+            }
+            let warning = await capture.startSystem()
+            guard self.capture === capture else { return }
+            if let warning {
+                self.state.warning = warning
+            } else if self.state.warning?.hasPrefix("Menunggu") == true {
+                self.state.warning = nil
             }
         }
     }

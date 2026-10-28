@@ -23,6 +23,8 @@ struct NotesResult: Decodable, Equatable {
 final class AppState: ObservableObject {
     @Published var phase: Phase = .idle
     @Published var expanded = false
+    /// Sedang menyiapkan rekaman (menunggu izin mic / mic menyala), sebelum timer berjalan.
+    @Published var starting = false
     @Published var micName = ""
     @Published var warning: String?
     @Published var marks: [TimeInterval] = []
