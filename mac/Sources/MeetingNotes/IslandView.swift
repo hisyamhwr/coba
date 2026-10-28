@@ -72,6 +72,9 @@ struct IslandView: View {
                 chip("Mulai Catat", icon: "record.circle", color: Palette.green, filled: true) { controller.start() }
                 chip("Folder", icon: "folder") { controller.openFolder() }
             }
+            Toggle("Buat juga Word (.docx)", isOn: $state.exportDocx)
+                .toggleStyle(.checkbox)
+                .font(.system(size: 12))
             Text("Shortcut: ⌃⌥M").font(.system(size: 11)).foregroundStyle(Palette.muted)
         }
     }

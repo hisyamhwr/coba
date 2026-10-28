@@ -183,8 +183,19 @@ def test_pipeline_without_any_summarizer_saves_transcript(tmp_path, monkeypatch)
     settings = Settings(output_dir=tmp_path / "out")
     result = process_recording(_audio(tmp_path), settings, INFO.started_at, lambda _: None, FakeTranscriber())
     assert result.markdown_path.name == "2026-10-27_0930_rapat.md"
-    assert result.docx_path.exists()
+    # Word tidak dibuat bila tidak dicentang (default).
+    assert result.docx_path is None
+    assert list(settings.output_dir.glob("*.docx")) == []
     assert "Claude Code belum terpasang" in result.note
+
+
+def test_pipeline_creates_docx_when_checked(tmp_path, monkeypatch):
+    _no_api_key(monkeypatch)
+    monkeypatch.setattr(summarizer_module, "find_claude_cli", lambda: None)
+    settings = Settings(output_dir=tmp_path / "out", export_docx=True)
+    result = process_recording(_audio(tmp_path), settings, INFO.started_at, lambda _: None, FakeTranscriber())
+    assert result.docx_path == settings.output_dir / "2026-10-27_0930_rapat.docx"
+    assert result.docx_path.exists()
 
 
 def test_make_summarizer_prefers_subscription_without_api_key(monkeypatch):
@@ -370,7 +381,7 @@ def test_cli_json_mode_for_mac_app(tmp_path, monkeypatch, capsys):
     seen = {}
 
     def fake_process(audio, settings, started_at, on_status, marks=()):
-        seen.update(marks=marks, started_at=started_at)
+        seen.update(marks=marks, started_at=started_at, docx=settings.export_docx)
         on_status("Mentranskrip... 50%")
         return pipeline.NotesResult(tmp_path / "a.md", tmp_path / "a.docx", None, "Sinkronisasi Vendor", 2, 3)
 
@@ -378,7 +389,7 @@ def test_cli_json_mode_for_mac_app(tmp_path, monkeypatch, capsys):
     marks = tmp_path / "penting.json"
     marks.write_text("[12.5, 300]")
     monkeypatch.setattr(sys, "argv", ["meeting_notes", "proses", str(tmp_path / "rapat.wav"), "--json",
-                                      "--penting", str(marks), "--mulai", "2026-10-27T09:30:00"])
+                                      "--penting", str(marks), "--mulai", "2026-10-27T09:30:00", "--docx"])
     cli.main()
     lines = capsys.readouterr().out.strip().splitlines()
     assert lines[0] == "STATUS\tMentranskrip... 50%"
@@ -386,4 +397,4 @@ def test_cli_json_mode_for_mac_app(tmp_path, monkeypatch, capsys):
     assert kind == "RESULT"
     assert json.loads(payload)["title"] == "Sinkronisasi Vendor"
     assert json.loads(payload)["action_items"] == 3
-    assert seen == {"marks": [12.5, 300], "started_at": datetime(2026, 10, 27, 9, 30)}
+    assert seen == {"marks": [12.5, 300], "started_at": datetime(2026, 10, 27, 9, 30), "docx": True}

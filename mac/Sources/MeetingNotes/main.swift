@@ -39,6 +39,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         let menu = NSMenu()
         menu.addItem(NSMenuItem(title: "Mulai Catat  (⌃⌥M)", action: #selector(toggle), keyEquivalent: ""))
         menu.addItem(NSMenuItem(title: "Buka folder notulen", action: #selector(openFolder), keyEquivalent: ""))
+        menu.addItem(NSMenuItem(title: "Buat juga Word (.docx)", action: #selector(toggleDocx), keyEquivalent: ""))
         menu.addItem(.separator())
         menu.addItem(NSMenuItem(title: "Meeting Notes v\(Config.version)", action: nil, keyEquivalent: ""))
         menu.addItem(NSMenuItem(title: "Keluar", action: #selector(quit), keyEquivalent: "q"))
@@ -47,10 +48,12 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         }
         item.menu = menu
         statusItem = item
+        updateMenuTitle()
     }
 
     private func updateMenuTitle() {
-        guard let first = statusItem?.menu?.items.first else { return }
+        guard let items = statusItem?.menu?.items, let first = items.first else { return }
+        items.first { $0.action == #selector(toggleDocx) }?.state = controller.state.exportDocx ? .on : .off
         switch controller.state.phase {
         case .recording: first.title = "Selesai & Susun MoM  (⌃⌥M)"
         case .processing: first.title = "Sedang memproses…"
@@ -60,6 +63,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
     @objc private func toggle() { controller.toggle() }
     @objc private func openFolder() { controller.openFolder() }
+    @objc private func toggleDocx() { controller.state.exportDocx.toggle() }
     @objc private func quit() { NSApp.terminate(nil) }
 }
 

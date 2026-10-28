@@ -98,6 +98,7 @@ final class MeetingController {
         self.processor = processor
         processor.run(
             audio: dir.appendingPathComponent("meeting.wav"), marks: marksURL, startedAt: startedAt,
+            docx: state.exportDocx,
             onStatus: { [weak self] message in
                 Task { @MainActor in self?.updateStep(message) }
             },
@@ -119,7 +120,8 @@ final class MeetingController {
 
     func openResult() {
         guard let result = state.result else { return }
-        NSWorkspace.shared.open(URL(fileURLWithPath: result.docx))
+        // Buka Word bila dibuat; selain itu file Markdown (terbuka di aplikasi teks default).
+        NSWorkspace.shared.open(URL(fileURLWithPath: result.docx ?? result.markdown))
     }
 
     func copyResult() {

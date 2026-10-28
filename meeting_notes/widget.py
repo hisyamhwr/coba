@@ -57,6 +57,11 @@ class MeetingWidget:
             bg=GREEN, fg="white", activebackground=GREEN, relief="flat", command=self.toggle,
         )
         self.button.pack()
+        self.docx_var = tk.BooleanVar(value=settings.export_docx)
+        tk.Checkbutton(
+            self.root, text="Buat juga Word (.docx)", variable=self.docx_var, font=("Helvetica", 9),
+            bg=BG, fg=MUTED, selectcolor=BG, activebackground=BG, activeforeground=FG, highlightthickness=0,
+        ).pack(pady=(6, 0))
         self.status = tk.Label(
             self.root, text="Siap. Klik untuk mulai mendengarkan.", wraplength=220,
             font=("Helvetica", 9), bg=BG, fg=MUTED, justify="center",
@@ -106,6 +111,8 @@ class MeetingWidget:
         self.state = "processing"
         self.button.configure(text="Memproses...", state="disabled", bg="#4a5059")
         self.meter.coords(self.meter_bar, 0, 0, 0, 6)
+        # Dibaca di thread utama: variabel Tk tidak aman diakses dari thread lain.
+        self.settings.export_docx = self.docx_var.get()
         threading.Thread(target=self._process, daemon=True).start()
 
     def _process(self) -> None:

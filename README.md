@@ -178,6 +178,7 @@ putus), aplikasi otomatis kembali ke Whisper lokal dan mencatatnya di notulen.
 | `WHISPER_MODEL` | `large-v3-turbo` | `small` lebih cepat tapi kurang akurat; `large-v3` sedikit lebih akurat tapi berat untuk RAM 8 GB |
 | `WHISPER_ENGINE` | `auto` | `mlx` (Mac M1/M2/...), `faster-whisper` (Windows/Linux/Mac Intel) |
 | `MEETING_LANGUAGE` | `id` | Bahasa utama rapat. `id` tetap menangkap istilah Inggris; pakai `auto` jika rapat dominan Inggris |
+| `EXPORT_DOCX` | `false` | Buat juga file Word (.docx); bisa juga lewat centang di widget/aplikasi Mac |
 | `OUTPUT_DIR` | `~/MeetingNotes` | Folder notulen. Rekaman audio disimpan di subfolder `rekaman/` |
 | `CAPTURE_SYSTEM_AUDIO` | `true` | Rekam juga suara dari speaker/headphone |
 | `CLAUDE_MODEL` | `claude-opus-5-5` | Model untuk mode `api` |

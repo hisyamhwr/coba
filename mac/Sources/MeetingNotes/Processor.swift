@@ -20,7 +20,7 @@ final class Processor {
     private var result: NotesResult?
 
     func run(
-        audio: URL, marks: URL, startedAt: Date,
+        audio: URL, marks: URL, startedAt: Date, docx: Bool,
         onStatus: @escaping (String) -> Void,
         onFinish: @escaping (Result<NotesResult, Error>) -> Void
     ) {
@@ -32,7 +32,7 @@ final class Processor {
         process.arguments = [
             "-m", "meeting_notes", "proses", audio.path, "--json",
             "--penting", marks.path, "--mulai", formatter.string(from: startedAt),
-        ]
+        ] + (docx ? ["--docx"] : [])
         process.currentDirectoryURL = URL(fileURLWithPath: Config.repoPath)
         // Aplikasi yang dibuka dari Finder tidak membawa PATH terminal; tambahkan lokasi umum `claude`.
         var env = ProcessInfo.processInfo.environment

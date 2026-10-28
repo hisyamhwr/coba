@@ -4,7 +4,7 @@ Aplikasi menu bar dengan "pulau" ala Dynamic Island di tengah atas layar:
 
 | Status | Tampilan |
 |---|---|
-| Siap | Kapsul kecil "Meeting Notes"; klik untuk membuka tombol **Mulai Catat** |
+| Siap | Kapsul kecil "Meeting Notes"; klik untuk membuka tombol **Mulai Catat** dan centang **Buat juga Word (.docx)** |
 | Merekam | Titik merah, timer, gelombang suara; klik untuk melihat transkrip live, **Tandai penting**, dan tombol stop oranye |
 | Memproses | Langkah *Mentranskrip → Mengoreksi → Menyusun MoM* |
 | Selesai | Judul rapat, jumlah keputusan & action item, tombol **Buka MoM**, **Salin**, **Folder** |

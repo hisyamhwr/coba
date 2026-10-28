@@ -8,7 +8,8 @@ enum Phase: Equatable {
 struct NotesResult: Decodable, Equatable {
     let title: String
     let markdown: String
-    let docx: String
+    /// nil bila Word tidak dicentang.
+    let docx: String?
     let decisions: Int
     let action_items: Int
     let note: String?
@@ -30,13 +31,17 @@ final class AppState: ObservableObject {
     @Published var stepDetail = ""
     @Published var result: NotesResult?
     @Published var errorMessage = ""
+    /// Centang "Buat juga Word (.docx)"; diingat antar sesi.
+    @Published var exportDocx = UserDefaults.standard.bool(forKey: "exportDocx") {
+        didSet { UserDefaults.standard.set(exportDocx, forKey: "exportDocx") }
+    }
 
     var recordingDir: URL?
 
     /// Ukuran panel per status; panel mengikuti ukuran ini.
     var panelSize: CGSize {
         switch phase {
-        case .idle: return expanded ? CGSize(width: 320, height: 118) : CGSize(width: 170, height: 32)
+        case .idle: return expanded ? CGSize(width: 320, height: 142) : CGSize(width: 170, height: 32)
         case .recording: return expanded ? CGSize(width: 460, height: 178) : CGSize(width: 250, height: 32)
         case .processing: return CGSize(width: 380, height: 100)
         case .done: return CGSize(width: 440, height: 136)

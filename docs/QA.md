@@ -13,7 +13,7 @@ pesan galat/screenshot di langkah pertama yang gagal. Bug diperbaiki sebagai 2.0
 | 4 | Bicara 1 menit | Transkrip live muncul dan ikut berubah; gelombang suara bergerak |
 | 5 | Klik **Tandai penting** 2x | Chip menjadi "Tandai penting (2)" |
 | 6 | Tekan ⌃⌥M | Rekaman berhenti, status berpindah ke "Memproses" |
-| 7 | Tunggu | Kartu "MoM siap" + notifikasi; **Buka MoM** membuka .docx berisi "Momen Penting" |
+| 7 | Tunggu | Kartu "MoM siap" + notifikasi; **Buka MoM** membuka MoM (.md, atau .docx bila "Buat juga Word" dicentang) berisi "Momen Penting" |
 | 8 | Izinkan Screen & System Audio Recording, buka ulang app, putar video YouTube sambil merekam **dengan headphone** | Suara video ikut tertranskrip di MoM |
 | 9 | Meeting Zoom/Meet sungguhan ≥ 15 menit | Suara peserta lain dan suaramu tercatat; MoM per agenda |
 | 10 | Klik di luar pulau / pindah Space / layar penuh | Pulau tetap di atas, tidak menghalangi kerja |

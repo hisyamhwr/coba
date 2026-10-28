@@ -20,6 +20,7 @@ def main() -> None:
     proses.add_argument("audio", type=Path, help="File audio (wav, mp3, m4a, ...)")
     proses.add_argument("--penting", type=Path, help="File JSON berisi daftar detik 'Tandai penting'")
     proses.add_argument("--mulai", help="Waktu mulai rapat (ISO 8601), untuk nama file dan tanggal notulen")
+    proses.add_argument("--docx", action="store_true", help="Buat juga file Word (.docx)")
     proses.add_argument("--json", action="store_true", help="Keluaran untuk aplikasi Mac: STATUS/RESULT per baris")
     banding = sub.add_parser("bandingkan", help="Bandingkan hasil transkripsi beberapa mesin pada rekaman yang sama")
     banding.add_argument("audio", type=Path, help="File audio (wav, mp3, m4a, ...)")
@@ -34,14 +35,20 @@ def main() -> None:
         marks = json.loads(args.penting.read_text()) if args.penting else []
         started_at = datetime.fromisoformat(args.mulai) if args.mulai else None
         on_status = (lambda msg: print(f"STATUS\t{msg}", flush=True)) if args.json else print
-        result = process_recording(args.audio, Settings(), started_at, on_status, marks=marks)
+        settings = Settings()
+        if args.docx:
+            settings.export_docx = True
+        result = process_recording(args.audio, settings, started_at, on_status, marks=marks)
         if args.json:
             print("RESULT\t" + json.dumps({
-                "title": result.title, "markdown": str(result.markdown_path), "docx": str(result.docx_path),
+                "title": result.title, "markdown": str(result.markdown_path),
+                "docx": str(result.docx_path) if result.docx_path else None,
                 "decisions": result.decisions, "action_items": result.action_items, "note": result.note,
             }), flush=True)
         else:
-            print(f"Markdown : {result.markdown_path}\nWord     : {result.docx_path}")
+            print(f"Markdown : {result.markdown_path}")
+            if result.docx_path:
+                print(f"Word     : {result.docx_path}")
             if result.note:
                 print(f"Catatan  : {result.note}")
     elif args.command == "bandingkan":

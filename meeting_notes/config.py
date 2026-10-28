@@ -45,6 +45,8 @@ class Settings:
     )
     # Rekam juga suara dari speaker/headphone (peserta meeting online). Windows & Linux saja.
     capture_system_audio: bool = field(default_factory=lambda: _env_bool("CAPTURE_SYSTEM_AUDIO", True))
+    # Buat juga file Word (.docx) selain Markdown (.md). Bisa diubah lewat centang di widget/aplikasi Mac.
+    export_docx: bool = field(default_factory=lambda: _env_bool("EXPORT_DOCX", False))
     sample_rate: int = 16000
 
     @property

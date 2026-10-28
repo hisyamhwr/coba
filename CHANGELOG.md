@@ -2,6 +2,13 @@
 
 Format versi: `MAYOR.FITUR.PERBAIKAN` (lihat [docs/ROADMAP.md](docs/ROADMAP.md)).
 
+## 2.0.2
+
+- Word (.docx) kini opsional: centang **"Buat juga Word (.docx)"** di aplikasi Mac (pulau atau menu bar) atau di
+  widget Python. Default hanya Markdown (.md). Pilihan di aplikasi Mac diingat antar sesi.
+- `proses --docx` dan `EXPORT_DOCX=true` di `.env` untuk baris perintah.
+- **Buka MoM** membuka .docx bila dibuat, selain itu file .md.
+
 ## 2.0.1
 
 - Aplikasi Mac: perbaikan kompilasi Swift 6.4 (isolasi main actor di titik masuk aplikasi dan inisialisasi,

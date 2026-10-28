@@ -1,4 +1,4 @@
-"""Alur lengkap: audio -> transkrip -> koreksi & ringkasan -> file .md dan .docx."""
+"""Alur lengkap: audio -> transkrip -> koreksi & ringkasan -> file .md (dan .docx bila diminta)."""
 
 import re
 import tempfile
@@ -30,7 +30,7 @@ from .transcriber import (
 @dataclass
 class NotesResult:
     markdown_path: Path
-    docx_path: Path
+    docx_path: Path | None
     note: str | None
     title: str = ""
     decisions: int = 0
@@ -118,7 +118,9 @@ def process_recording(
     base = f"{started_at:%Y-%m-%d_%H%M}_{_slug(summary.title if summary else 'rapat')}"
     md_path = settings.output_dir / f"{base}.md"
     md_path.write_text(render_markdown(info, paragraphs, summary, note, corrections), encoding="utf-8")
-    docx_path = write_docx(settings.output_dir / f"{base}.docx", info, paragraphs, summary, note, corrections)
+    docx_path = None
+    if settings.export_docx:
+        docx_path = write_docx(settings.output_dir / f"{base}.docx", info, paragraphs, summary, note, corrections)
 
     on_status("Selesai!")
     if summary:
