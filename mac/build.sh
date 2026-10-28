@@ -10,7 +10,12 @@ VERSION="$(cd "$REPO" && "$PYTHON" -c 'import meeting_notes; print(meeting_notes
     echo "Python di $PYTHON belum berisi meeting_notes. Jalankan 'conda activate meeting' dulu." >&2
     exit 1
 }
-"$PYTHON" -c 'import mlx_whisper' 2>/dev/null || echo "Peringatan: mlx-whisper belum terpasang (pip install -r requirements.txt)."
+# Pastikan semua library terpasang di Python yang dipakai aplikasi (bukan Python lain, mis. conda "base").
+if ! "$PYTHON" -c 'import soundfile, faster_whisper, docx, dotenv, pydantic, anthropic, requests' 2>/dev/null; then
+    echo "Memasang library Python yang belum ada ke $PYTHON ..."
+    "$PYTHON" -m pip install -r "$REPO/requirements.txt"
+fi
+"$PYTHON" -c 'import mlx_whisper' 2>/dev/null || echo "Peringatan: mlx-whisper belum terpasang."
 
 echo "Membangun Meeting Notes v$VERSION"
 echo "  Python : $PYTHON"

@@ -269,7 +269,14 @@ struct IslandView: View {
             }
             Text(state.errorMessage).font(.system(size: 12)).foregroundStyle(Palette.muted).lineLimit(3)
                 .textSelection(.enabled)
-            chip("Buka folder rekaman", icon: "folder") { controller.openFolder() }
+            HStack(spacing: 8) {
+                if state.recordingDir != nil {
+                    chip("Proses ulang", icon: "arrow.clockwise", color: Palette.orange, filled: true) {
+                        controller.retry()
+                    }
+                }
+                chip("Buka folder rekaman", icon: "folder") { controller.openFolder() }
+            }
         }
     }
 

@@ -2,6 +2,13 @@
 
 Format versi: `MAYOR.FITUR.PERBAIKAN` (lihat [docs/ROADMAP.md](docs/ROADMAP.md)).
 
+## 2.0.7
+
+- `build.sh` memeriksa library Python (soundfile, faster-whisper, dll.) pada Python yang dipakai aplikasi dan
+  memasangnya otomatis bila belum ada. Sebelumnya library bisa terpasang di Python lain (conda "base") sehingga
+  aplikasi gagal dengan `No module named 'soundfile'`.
+- Kartu "Gagal memproses" punya tombol **Proses ulang** untuk rekaman yang sama.
+
 ## 2.0.6
 
 - Transkrip live tetap aktif secara default dan lebih ringan: update teks dibatasi ±4x per detik (hasil akhir

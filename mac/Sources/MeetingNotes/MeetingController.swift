@@ -98,6 +98,22 @@ final class MeetingController {
         let marks = (try? JSONEncoder().encode(state.marks.map { ($0 * 10).rounded() / 10 })) ?? Data("[]".utf8)
         try? marks.write(to: marksURL)
 
+        runProcessor(dir: dir)
+    }
+
+    /// Proses ulang rekaman terakhir setelah gagal (mis. setelah memperbaiki environment Python).
+    func retry() {
+        guard state.phase == .failed, let dir = state.recordingDir,
+              FileManager.default.fileExists(atPath: dir.appendingPathComponent("meeting.wav").path)
+        else { return }
+        runProcessor(dir: dir)
+    }
+
+    private func runProcessor(dir: URL) {
+        let marksURL = dir.appendingPathComponent("penting.json")
+        if !FileManager.default.fileExists(atPath: marksURL.path) {
+            try? Data("[]".utf8).write(to: marksURL)
+        }
         state.phase = .processing
         state.expanded = false
         state.step = 0
