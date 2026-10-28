@@ -30,7 +30,10 @@ fi
 APP="build/MeetingNotes.app"
 rm -rf "$APP"
 mkdir -p "$APP/Contents/MacOS"
-cp .build/release/MeetingNotes "$APP/Contents/MacOS/MeetingNotes"
+# Lokasi hasil build berbeda antar versi Swift; tanyakan langsung ke Swift.
+BIN="$(swift build -c release --show-bin-path)/MeetingNotes"
+[ -f "$BIN" ] || BIN="$(find .build -type f -name MeetingNotes -perm -u+x -path '*elease*' | head -1)"
+cp "$BIN" "$APP/Contents/MacOS/MeetingNotes"
 sed -e "s|__PYTHON__|$PYTHON|" -e "s|__REPO__|$REPO|" -e "s|__VERSION__|$VERSION|" Info.plist \
     > "$APP/Contents/Info.plist"
 # Tanda tangan lokal (ad-hoc) agar macOS mau memberi izin mikrofon & rekam audio.
