@@ -9,18 +9,22 @@ private enum Palette {
     static let muted = Color.white.opacity(0.6)
 }
 
-/// Kurva animasi ala Dynamic Island: pegas yang sedikit memantul sehingga bentuknya terasa "cair".
+/// Kurva animasi ala Dynamic Island: pegas cepat yang sedikit memantul sehingga bentuknya terasa "cair".
 enum Liquid {
-    static let morph = Animation.spring(response: 0.48, dampingFraction: 0.72, blendDuration: 0.1)
-    static let appear = Animation.spring(response: 0.7, dampingFraction: 0.62)
-    static let hover = Animation.spring(response: 0.32, dampingFraction: 0.7)
-    static let press = Animation.spring(response: 0.22, dampingFraction: 0.6)
+    static let morph = Animation.spring(response: 0.38, dampingFraction: 0.78)
+    static let appear = Animation.spring(response: 0.55, dampingFraction: 0.68)
+    static let hover = Animation.spring(response: 0.28, dampingFraction: 0.75)
+    static let press = Animation.spring(response: 0.2, dampingFraction: 0.65)
+    /// Isi baru muncul sedikit setelah bentuk mulai melebar; isi lama hilang cepat.
+    static let contentIn = Animation.easeOut(duration: 0.2).delay(0.07)
+    static let contentOut = Animation.easeIn(duration: 0.08)
 }
 
 /// "Pulau" ala Dynamic Island. Gaya mengikuti docs/design-references.
 ///
-/// Jendelanya berukuran tetap (IslandPanel.canvas); yang beranimasi hanya bentuk hitam di dalamnya, sehingga
-/// seluruh transisi dikerjakan SwiftUI di GPU tanpa mengubah ukuran jendela.
+/// Jendelanya berukuran tetap (IslandPanel.canvas); yang beranimasi hanya bentuk hitam di dalamnya. Isi pulau
+/// disusun sekali pada ukuran akhirnya (tidak ikut menyusut/melebar tiap frame) lalu cukup dipotong oleh
+/// bentuk yang beranimasi, jadi setiap frame animasi murah.
 struct IslandView: View {
     @ObservedObject var state: AppState
     let meter: LiveMeter
@@ -57,17 +61,23 @@ struct IslandView: View {
             topLeadingRadius: 0, bottomLeadingRadius: radius,
             bottomTrailingRadius: radius, topTrailingRadius: 0, style: .continuous
         )
+        let target = state.islandSize
         return ZStack(alignment: .top) {
             shape.fill(Color.black)
             content
                 .id(contentKey)
-                .transition(.blurReplace)
+                .transition(.asymmetric(
+                    insertion: .opacity.combined(with: .scale(scale: 0.94, anchor: .top))
+                        .animation(Liquid.contentIn),
+                    removal: .opacity.animation(Liquid.contentOut)
+                ))
                 .padding(.horizontal, 16)
                 .padding(.vertical, state.isCompact ? 0 : 12)
-                .frame(width: size.width, height: size.height)
+                // Ukuran akhir, bukan ukuran yang sedang beranimasi: isi tidak disusun ulang tiap frame.
+                .frame(width: target.width, height: target.height)
                 .opacity(appeared ? 1 : 0)
         }
-        .frame(width: size.width, height: size.height)
+        .frame(width: size.width, height: size.height, alignment: .top)
         .clipShape(shape)
         .scaleEffect(pressed ? 0.96 : 1, anchor: .top)
         .foregroundStyle(.white)
@@ -75,8 +85,7 @@ struct IslandView: View {
         .onHover { inside in
             withAnimation(Liquid.hover) { hovering = inside }
         }
-        .animation(Liquid.morph, value: state.phase)
-        .animation(Liquid.morph, value: state.expanded)
+        .animation(Liquid.morph, value: target)
     }
 
     /// Kunci isi pulau; bila berubah, isi lama memudar-blur dan isi baru muncul.
@@ -100,13 +109,13 @@ struct IslandView: View {
         }
     }
 
-    /// Klik pada pulau ringkas: efek tekan singkat, lalu pulau melebar.
+    /// Klik pada pulau ringkas: langsung melebar (tanpa jeda), dengan sentuhan "tekan" kecil bersamaan.
     private func expand() {
+        withAnimation(Liquid.morph) { state.expanded = true }
         withAnimation(Liquid.press) { pressed = true }
         Task { @MainActor in
-            try? await Task.sleep(nanoseconds: 120_000_000)
+            try? await Task.sleep(nanoseconds: 90_000_000)
             withAnimation(Liquid.press) { pressed = false }
-            withAnimation(Liquid.morph) { state.expanded = true }
         }
     }
 
@@ -324,41 +333,29 @@ private struct LiveText: View {
     }
 }
 
-/// Gelombang suara: 5 batang yang mengikuti level audio, bergoyang halus ±20 fps saja.
+/// Gelombang suara memakai efek simbol bawaan macOS yang dirender sistem, jauh lebih ringan daripada
+/// menggambar batang sendiri tiap frame. Aktif saat ada suara, redup saat hening.
 private struct Waveform: View {
     @ObservedObject var meter: LiveMeter
-    private let weights: [CGFloat] = [0.5, 0.8, 1.0, 0.7, 0.45]
 
     var body: some View {
-        TimelineView(.animation(minimumInterval: 1.0 / 20)) { context in
-            let t = context.date.timeIntervalSinceReferenceDate
-            HStack(spacing: 2) {
-                ForEach(weights.indices, id: \.self) { i in
-                    let wobble = 0.7 + 0.3 * sin(CGFloat(t) * 7 + CGFloat(i) * 1.3)
-                    Capsule()
-                        .fill(Palette.red)
-                        .frame(width: 3, height: max(3, 16 * CGFloat(meter.level) * weights[i] * wobble))
-                }
-            }
-        }
-        .frame(height: 16)
-        .animation(.easeOut(duration: 0.12), value: meter.level)
+        Image(systemName: "waveform")
+            .font(.system(size: 15, weight: .semibold))
+            .foregroundStyle(Palette.red)
+            .symbolEffect(.variableColor.iterative.dimInactiveLayers, options: .repeating,
+                          isActive: meter.level > 0.04)
+            .opacity(meter.level > 0.04 ? 1 : 0.45)
+            .animation(.easeOut(duration: 0.2), value: meter.level > 0.04)
     }
 }
 
-/// Titik merah yang "bernapas" pelan selama merekam.
+/// Titik merah yang berdenyut pelan selama merekam (efek simbol sistem, tanpa animasi per frame).
 private struct RecordingDot: View {
-    @State private var pulse = false
-
     var body: some View {
-        Circle()
-            .fill(Palette.red)
-            .frame(width: 8, height: 8)
-            .scaleEffect(pulse ? 1.25 : 0.85)
-            .opacity(pulse ? 1 : 0.7)
-            .onAppear {
-                withAnimation(.easeInOut(duration: 0.9).repeatForever(autoreverses: true)) { pulse = true }
-            }
+        Image(systemName: "circle.fill")
+            .font(.system(size: 8))
+            .foregroundStyle(Palette.red)
+            .symbolEffect(.pulse, options: .repeating)
     }
 }
 

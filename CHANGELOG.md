@@ -2,6 +2,16 @@
 
 Format versi: `MAYOR.FITUR.PERBAIKAN` (lihat [docs/ROADMAP.md](docs/ROADMAP.md)).
 
+## 2.0.4
+
+- Animasi lebih mulus dan responsif:
+  - klik pulau langsung melebar (sebelumnya menunggu 0,12 detik efek tekan);
+  - pegas lebih cepat (response 0,38) dengan pantulan halus;
+  - isi pulau disusun sekali pada ukuran akhirnya, bukan disusun ulang tiap frame selama animasi;
+  - efek blur (mahal) diganti fade + skala ringan; isi baru muncul sesaat setelah bentuk mulai melebar.
+- Lebih ringan: gelombang suara dan titik rekam memakai efek simbol bawaan macOS (dirender sistem), bukan
+  animasi per frame; SwiftUI tidak lagi menghitung ulang batas ukuran jendela setiap isi berubah.
+
 ## 2.0.3
 
 - Animasi "liquid" ala Dynamic Island: pulau tumbuh dari titik kecil saat muncul, berubah bentuk dengan pegas

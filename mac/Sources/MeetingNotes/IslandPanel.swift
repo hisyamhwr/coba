@@ -28,7 +28,10 @@ final class IslandPanel: NSPanel {
         panel.hidesOnDeactivate = false
         // Perlu agar gerak kursor sampai ke aplikasi ini (untuk menentukan kapan klik tembus).
         panel.acceptsMouseMovedEvents = true
-        panel.contentView = FirstMouseHostingView(rootView: rootView)
+        let host = FirstMouseHostingView(rootView: rootView)
+        // Jangan biarkan SwiftUI terus menghitung ulang batas ukuran jendela saat isi berubah (mahal).
+        host.sizingOptions = []
+        panel.contentView = host
         panel.place()
         return panel
     }
