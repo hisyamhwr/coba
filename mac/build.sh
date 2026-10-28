@@ -15,7 +15,17 @@ VERSION="$(cd "$REPO" && "$PYTHON" -c 'import meeting_notes; print(meeting_notes
 echo "Membangun Meeting Notes v$VERSION"
 echo "  Python : $PYTHON"
 echo "  Repo   : $REPO"
-swift build -c release
+mkdir -p build
+LOG="build/swift-build.log"
+if ! swift build -c release >"$LOG" 2>&1; then
+    echo
+    echo "BUILD GAGAL. Pesan error (kirim bagian ini):"
+    echo "------------------------------------------------------------"
+    grep -E "error:" -A4 "$LOG" | grep -v "^--$" | head -80
+    echo "------------------------------------------------------------"
+    echo "Log lengkap: mac/$LOG"
+    exit 1
+fi
 
 APP="build/MeetingNotes.app"
 rm -rf "$APP"

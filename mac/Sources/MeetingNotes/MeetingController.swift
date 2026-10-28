@@ -4,12 +4,16 @@ import UserNotifications
 /// Mengatur alur: siap → merekam → memproses → selesai/gagal.
 @MainActor
 final class MeetingController {
-    let state = AppState()
+    let state: AppState
     private var capture: AudioCapture?
     private var live: LiveTranscriber?
     private var processor: Processor?
     private var timer: Timer?
     private var startedAt = Date()
+
+    init() {
+        state = AppState()
+    }
 
     func toggle() {
         switch state.phase {
@@ -172,7 +176,7 @@ final class MeetingController {
         content.title = title
         content.body = body
         let request = UNNotificationRequest(identifier: UUID().uuidString, content: content, trigger: nil)
-        UNUserNotificationCenter.current().add(request)
+        UNUserNotificationCenter.current().add(request) { _ in }
     }
 
     private static let stampFormatter: DateFormatter = {

@@ -2,6 +2,12 @@
 
 Format versi: `MAYOR.FITUR.PERBAIKAN` (lihat [docs/ROADMAP.md](docs/ROADMAP.md)).
 
+## 2.0.1
+
+- Aplikasi Mac: perbaikan kompilasi Swift 6.4 (isolasi main actor di titik masuk aplikasi dan inisialisasi,
+  panggilan notifikasi yang ambigu).
+- `build.sh`: bila build gagal, hanya baris error yang ditampilkan; log lengkap di `mac/build/swift-build.log`.
+
 ## 2.0.0
 
 - **Aplikasi Mac native** (`mac/`): aplikasi menu bar dengan "pulau" ala Dynamic Island di tengah atas layar,

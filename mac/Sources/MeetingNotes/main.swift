@@ -4,13 +4,14 @@ import UserNotifications
 
 @MainActor
 final class AppDelegate: NSObject, NSApplicationDelegate {
-    private let controller = MeetingController()
+    private var controller: MeetingController!
     private var panel: IslandPanel?
     private var statusItem: NSStatusItem?
     private var hotKey: HotKey?
     private var cancellable: AnyCancellable?
 
     func applicationDidFinishLaunching(_ notification: Notification) {
+        controller = MeetingController()
         let panel = IslandPanel.make(rootView: IslandView(state: controller.state, controller: controller))
         panel.resize(to: controller.state.panelSize, animated: false)
         panel.orderFrontRegardless()
@@ -62,8 +63,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     @objc private func quit() { NSApp.terminate(nil) }
 }
 
-let app = NSApplication.shared
-let delegate = AppDelegate()
-app.delegate = delegate
-app.setActivationPolicy(.accessory)
-app.run()
+// Kode tingkat atas tidak otomatis berjalan di main actor; nyatakan secara eksplisit.
+MainActor.assumeIsolated {
+    let app = NSApplication.shared
+    let delegate = AppDelegate()
+    app.delegate = delegate
+    app.setActivationPolicy(.accessory)
+    app.run()
+}
