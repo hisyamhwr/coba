@@ -7,7 +7,7 @@ pesan galat/screenshot di langkah pertama yang gagal. Bug diperbaiki sebagai 2.0
 
 | # | Langkah | Yang diharapkan |
 |---|---|---|
-| 1 | `conda activate meeting && ./mac/build.sh` (lihat [mac/README.md](../mac/README.md)) | Berakhir dengan "Selesai: mac/build/MeetingNotes.app" |
+| 1 | `conda activate meeting && ./mac/build.sh` (lihat [mac/README.md](../mac/README.md)) | Berakhir dengan "Selesai: mac/build/MeetingNotes.app" ✅ lulus di 2.0.1 (Swift 6.4, macOS 26) |
 | 2 | `open mac/build/MeetingNotes.app` | Kapsul "Meeting Notes" muncul di tengah atas layar; ikon gelombang di menu bar |
 | 3 | Klik kapsul → **Mulai Catat** | Diminta izin Microphone & Speech Recognition; lalu timer berjalan dan nama mic tampil |
 | 4 | Bicara 1 menit | Transkrip live muncul dan ikut berubah; gelombang suara bergerak |
