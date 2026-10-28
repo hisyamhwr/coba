@@ -2,6 +2,11 @@
 
 Format versi: `MAYOR.FITUR.PERBAIKAN` (lihat [docs/ROADMAP.md](docs/ROADMAP.md)).
 
+## 2.0.6
+
+- Transkrip live tetap aktif secara default dan lebih ringan: update teks dibatasi ±4x per detik (hasil akhir
+  selalu langsung tampil) dan tanpa animasi tata letak per update.
+
 ## 2.0.5
 
 - Aplikasi Mac: bila pemrosesan gagal, pulau menampilkan inti error (baris terakhir) yang bisa diseleksi/disalin,

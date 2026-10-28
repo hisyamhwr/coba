@@ -330,7 +330,6 @@ private struct LiveText: View {
             .lineLimit(3)
             .frame(maxWidth: .infinity, alignment: .bottomLeading)
             .frame(height: 58, alignment: .bottomLeading)
-            .animation(.easeOut(duration: 0.2), value: meter.liveText)
     }
 }
 

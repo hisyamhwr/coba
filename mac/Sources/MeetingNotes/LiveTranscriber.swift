@@ -15,6 +15,9 @@ final class LiveTranscriber {
     private var committed = ""
     private var partial = ""
     private var running = false
+    /// Waktu terakhir teks dikirim ke UI (nanodetik), untuk membatasi update ±4x per detik.
+    private var lastEmit: UInt64 = 0
+    private static let minEmitInterval: UInt64 = 250_000_000
 
     init(onText: @escaping (String) -> Void) {
         self.onText = onText
@@ -100,8 +103,13 @@ final class LiveTranscriber {
             // Simpan secukupnya saja; yang ditampilkan hanya 2-3 baris terakhir.
             if self.committed.count > 600 { self.committed = String(self.committed.suffix(400)) }
             let display = (self.committed + " " + self.partial).trimmingCharacters(in: .whitespaces)
+            // Hasil akhir selalu dikirim; hasil sementara dibatasi agar UI tidak digambar ulang tiap kata.
+            let now = DispatchTime.now().uptimeNanoseconds
+            let isFinal = result?.isFinal ?? true
+            let shouldEmit = isFinal || now - self.lastEmit >= Self.minEmitInterval
+            if shouldEmit { self.lastEmit = now }
             self.lock.unlock()
-            self.onText(String(display.suffix(220)))
+            if shouldEmit { self.onText(String(display.suffix(220))) }
         }
     }
 }
