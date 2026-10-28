@@ -1,3 +1,4 @@
+import Accelerate
 import AVFoundation
 import CoreMedia
 import ScreenCaptureKit
@@ -37,6 +38,7 @@ final class AudioCapture: NSObject, SCStreamOutput, SCStreamDelegate {
     private var scStream: SCStream?
     private var file: AVAudioFile?
     private var systemBuffer: [Float] = []
+    private var lastLevel: Float = 0
     private let lock = NSLock()
     private let systemQueue = DispatchQueue(label: "meetingnotes.system-audio")
     private let writeQueue = DispatchQueue(label: "meetingnotes.writer")
@@ -120,8 +122,14 @@ final class AudioCapture: NSObject, SCStreamOutput, SCStreamDelegate {
             try? self?.file?.write(from: out)
         }
         onSamples?(out)
-        let rms = sqrt(mixed.reduce(0) { $0 + $1 * $1 } / Float(mixed.count))
-        onLevel?(min(rms * 8, 1))
+        var rms: Float = 0
+        vDSP_rmsqv(mixed, 1, &rms, vDSP_Length(mixed.count))
+        let level = min(rms * 8, 1)
+        // Kirim ke UI hanya bila berubah cukup terlihat, agar tidak menggambar ulang tanpa perlu.
+        if abs(level - lastLevel) > 0.03 {
+            lastLevel = level
+            onLevel?(level)
+        }
     }
 
     // MARK: - Audio sistem lewat ScreenCaptureKit

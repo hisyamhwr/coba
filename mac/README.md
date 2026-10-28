@@ -11,6 +11,9 @@ Aplikasi menu bar dengan "pulau" ala Dynamic Island di tengah atas layar:
 
 Shortcut global **⌃⌥M** (Control + Option + M) untuk mulai/berhenti dari aplikasi mana pun.
 
+Menu bar (ikon gelombang) berisi: Mulai/Selesai, Buka folder notulen, **Buat juga Word (.docx)**,
+**Transkrip live** (matikan untuk menghemat CPU/baterai), dan Keluar.
+
 ## Cara kerja
 
 - **Aplikasi Swift (folder ini):** merekam mic + audio Zoom/Meet/Teams secara digital (ScreenCaptureKit,

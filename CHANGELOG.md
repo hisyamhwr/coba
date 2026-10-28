@@ -2,6 +2,18 @@
 
 Format versi: `MAYOR.FITUR.PERBAIKAN` (lihat [docs/ROADMAP.md](docs/ROADMAP.md)).
 
+## 2.0.3
+
+- Animasi "liquid" ala Dynamic Island: pulau tumbuh dari titik kecil saat muncul, berubah bentuk dengan pegas
+  yang sedikit memantul, isi berganti dengan efek blur, sedikit menggembung saat kursor di atasnya, efek tekan
+  saat diklik, titik rekam yang "bernapas", dan timer dengan angka bergulir.
+- Lebih ringan: jendela tidak lagi diubah ukurannya (hanya bentuk di dalamnya yang beranimasi); timer, level
+  suara, dan transkrip live dipisah sehingga hanya komponen kecilnya yang digambar ulang; update level suara
+  dikirim hanya bila berubah; gelombang suara dibatasi ±20 fps.
+- Klik di area transparan sekitar pulau tembus ke aplikasi di bawahnya; posisi pulau menyesuaikan saat layar
+  berubah.
+- Menu bar: **Transkrip live** bisa dimatikan untuk menghemat CPU/baterai (diingat antar sesi).
+
 ## 2.0.2
 
 - Word (.docx) kini opsional: centang **"Buat juga Word (.docx)"** di aplikasi Mac (pulau atau menu bar) atau di

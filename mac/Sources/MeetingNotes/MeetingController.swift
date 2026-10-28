@@ -5,6 +5,7 @@ import UserNotifications
 @MainActor
 final class MeetingController {
     let state: AppState
+    let meter: LiveMeter
     private var capture: AudioCapture?
     private var live: LiveTranscriber?
     private var processor: Processor?
@@ -13,6 +14,7 @@ final class MeetingController {
 
     init() {
         state = AppState()
+        meter = LiveMeter()
     }
 
     func toggle() {
@@ -34,13 +36,17 @@ final class MeetingController {
             return
         }
 
-        let live = LiveTranscriber { [weak self] text in
-            Task { @MainActor in self?.state.liveText = text }
-        }
+        // Transkrip live opsional (menu bar) karena pengenal suara memakai CPU selama rapat.
+        let live: LiveTranscriber? = state.liveTranscript ? LiveTranscriber { [weak self] text in
+            Task { @MainActor in
+                guard let self, self.meter.liveText != text else { return }
+                self.meter.liveText = text
+            }
+        } : nil
         let capture = AudioCapture(output: dir.appendingPathComponent("meeting.wav"))
-        capture.onSamples = { [weak live] buffer in live?.append(buffer) }
+        capture.onSamples = live.map { transcriber in { buffer in transcriber.append(buffer) } }
         capture.onLevel = { [weak self] level in
-            Task { @MainActor in self?.state.level = level }
+            Task { @MainActor in self?.meter.level = level }
         }
 
         Task { @MainActor in
@@ -57,12 +63,13 @@ final class MeetingController {
                 self.state.micName = capture.micName
                 self.state.warning = warning
                 self.state.marks = []
-                self.state.elapsed = 0
-                self.state.liveText = ""
+                self.meter.elapsed = 0
+                self.meter.level = 0
+                self.meter.liveText = live == nil ? "Transkrip live dimatikan (hemat baterai)." : ""
                 self.state.result = nil
                 self.state.phase = .recording
                 self.state.expanded = true
-                live.start()
+                live?.start()
                 self.timer = Timer.scheduledTimer(withTimeInterval: 1, repeats: true) { [weak self] _ in
                     Task { @MainActor in self?.tick() }
                 }
@@ -74,7 +81,7 @@ final class MeetingController {
 
     func markImportant() {
         guard state.phase == .recording else { return }
-        state.marks.append(state.elapsed)
+        state.marks.append(meter.elapsed)
     }
 
     func stop() {
@@ -83,6 +90,7 @@ final class MeetingController {
         timer = nil
         live?.stop()
         capture.stop()
+        meter.level = 0
         self.capture = nil
         self.live = nil
 
@@ -134,8 +142,8 @@ final class MeetingController {
     // MARK: - Internal
 
     private func tick() {
-        state.elapsed = Date().timeIntervalSince(startedAt)
-        if Int(state.elapsed) > 0, Int(state.elapsed) % Config.liveRotateSeconds == 0 {
+        meter.elapsed = Date().timeIntervalSince(startedAt)
+        if Int(meter.elapsed) > 0, Int(meter.elapsed) % Config.liveRotateSeconds == 0 {
             live?.rotate()
         }
     }

@@ -15,14 +15,14 @@ struct NotesResult: Decodable, Equatable {
     let note: String?
 }
 
-/// Semua yang ditampilkan di "pulau" notch. Hanya diubah dari main actor.
+/// Status pulau yang jarang berubah (fase, ukuran, hasil). Hanya diubah dari main actor.
+///
+/// Data yang berubah berkali-kali per detik (timer, level suara, transkrip live) sengaja dipisah ke
+/// `LiveMeter`, supaya perubahan itu hanya menggambar ulang komponen kecilnya, bukan seluruh pulau.
 @MainActor
 final class AppState: ObservableObject {
     @Published var phase: Phase = .idle
     @Published var expanded = false
-    @Published var elapsed: TimeInterval = 0
-    @Published var level: Float = 0
-    @Published var liveText = ""
     @Published var micName = ""
     @Published var warning: String?
     @Published var marks: [TimeInterval] = []
@@ -35,11 +35,15 @@ final class AppState: ObservableObject {
     @Published var exportDocx = UserDefaults.standard.bool(forKey: "exportDocx") {
         didSet { UserDefaults.standard.set(exportDocx, forKey: "exportDocx") }
     }
+    /// Transkrip live bisa dimatikan untuk menghemat CPU/baterai; diingat antar sesi.
+    @Published var liveTranscript = UserDefaults.standard.object(forKey: "liveTranscript") as? Bool ?? true {
+        didSet { UserDefaults.standard.set(liveTranscript, forKey: "liveTranscript") }
+    }
 
     var recordingDir: URL?
 
-    /// Ukuran panel per status; panel mengikuti ukuran ini.
-    var panelSize: CGSize {
+    /// Ukuran pulau per status. Jendelanya berukuran tetap; hanya bentuk pulau di dalamnya yang beranimasi.
+    var islandSize: CGSize {
         switch phase {
         case .idle: return expanded ? CGSize(width: 320, height: 142) : CGSize(width: 170, height: 32)
         case .recording: return expanded ? CGSize(width: 460, height: 178) : CGSize(width: 250, height: 32)
@@ -48,4 +52,16 @@ final class AppState: ObservableObject {
         case .failed: return CGSize(width: 440, height: 128)
         }
     }
+
+    var isCompact: Bool {
+        (phase == .idle || phase == .recording) && !expanded
+    }
+}
+
+/// Data yang berubah cepat selama rapat.
+@MainActor
+final class LiveMeter: ObservableObject {
+    @Published var level: Float = 0
+    @Published var elapsed: TimeInterval = 0
+    @Published var liveText = ""
 }

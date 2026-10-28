@@ -9,41 +9,109 @@ private enum Palette {
     static let muted = Color.white.opacity(0.6)
 }
 
+/// Kurva animasi ala Dynamic Island: pegas yang sedikit memantul sehingga bentuknya terasa "cair".
+enum Liquid {
+    static let morph = Animation.spring(response: 0.48, dampingFraction: 0.72, blendDuration: 0.1)
+    static let appear = Animation.spring(response: 0.7, dampingFraction: 0.62)
+    static let hover = Animation.spring(response: 0.32, dampingFraction: 0.7)
+    static let press = Animation.spring(response: 0.22, dampingFraction: 0.6)
+}
+
 /// "Pulau" ala Dynamic Island. Gaya mengikuti docs/design-references.
+///
+/// Jendelanya berukuran tetap (IslandPanel.canvas); yang beranimasi hanya bentuk hitam di dalamnya, sehingga
+/// seluruh transisi dikerjakan SwiftUI di GPU tanpa mengubah ukuran jendela.
 struct IslandView: View {
     @ObservedObject var state: AppState
+    let meter: LiveMeter
     let controller: MeetingController
 
+    @State private var appeared = false
+    @State private var hovering = false
+    @State private var pressed = false
+
     var body: some View {
-        content
-            .padding(.horizontal, 16)
-            .padding(.vertical, isCompact ? 0 : 12)
-            .frame(width: state.panelSize.width, height: state.panelSize.height)
-            .background(
-                UnevenRoundedRectangle(
-                    topLeadingRadius: 0, bottomLeadingRadius: isCompact ? 16 : 26,
-                    bottomTrailingRadius: isCompact ? 16 : 26, topTrailingRadius: 0, style: .continuous
-                )
-                .fill(Color.black)
-            )
-            .foregroundStyle(.white)
-            .animation(.spring(response: 0.35, dampingFraction: 0.85), value: state.phase)
-            .animation(.spring(response: 0.35, dampingFraction: 0.85), value: state.expanded)
+        island
+            .frame(width: IslandPanel.canvas.width, height: IslandPanel.canvas.height, alignment: .top)
+            .onAppear {
+                withAnimation(Liquid.appear.delay(0.1)) { appeared = true }
+            }
     }
 
-    private var isCompact: Bool {
-        (state.phase == .idle || state.phase == .recording) && !state.expanded
+    // MARK: Bentuk pulau
+
+    private var size: CGSize {
+        guard appeared else { return CGSize(width: 60, height: 8) }
+        let base = state.islandSize
+        // Saat kursor di atas pulau ringkas, pulau sedikit "menggembung".
+        guard hovering, state.isCompact else { return base }
+        return CGSize(width: base.width + 16, height: base.height + 4)
+    }
+
+    private var radius: CGFloat {
+        state.isCompact ? size.height / 2 : 28
+    }
+
+    private var island: some View {
+        let shape = UnevenRoundedRectangle(
+            topLeadingRadius: 0, bottomLeadingRadius: radius,
+            bottomTrailingRadius: radius, topTrailingRadius: 0, style: .continuous
+        )
+        return ZStack(alignment: .top) {
+            shape.fill(Color.black)
+            content
+                .id(contentKey)
+                .transition(.blurReplace)
+                .padding(.horizontal, 16)
+                .padding(.vertical, state.isCompact ? 0 : 12)
+                .frame(width: size.width, height: size.height)
+                .opacity(appeared ? 1 : 0)
+        }
+        .frame(width: size.width, height: size.height)
+        .clipShape(shape)
+        .scaleEffect(pressed ? 0.96 : 1, anchor: .top)
+        .foregroundStyle(.white)
+        .contentShape(shape)
+        .onHover { inside in
+            withAnimation(Liquid.hover) { hovering = inside }
+        }
+        .animation(Liquid.morph, value: state.phase)
+        .animation(Liquid.morph, value: state.expanded)
+    }
+
+    /// Kunci isi pulau; bila berubah, isi lama memudar-blur dan isi baru muncul.
+    private var contentKey: String {
+        "\(state.phase)-\(state.expanded)"
     }
 
     @ViewBuilder
     private var content: some View {
         switch state.phase {
-        case .idle: state.expanded ? AnyView(idleExpanded) : AnyView(idleCompact)
-        case .recording: state.expanded ? AnyView(recordingExpanded) : AnyView(recordingCompact)
-        case .processing: AnyView(processing)
-        case .done: AnyView(done)
-        case .failed: AnyView(failed)
+        case .idle:
+            if state.expanded { idleExpanded } else { idleCompact }
+        case .recording:
+            if state.expanded { recordingExpanded } else { recordingCompact }
+        case .processing:
+            processing
+        case .done:
+            done
+        case .failed:
+            failed
         }
+    }
+
+    /// Klik pada pulau ringkas: efek tekan singkat, lalu pulau melebar.
+    private func expand() {
+        withAnimation(Liquid.press) { pressed = true }
+        Task { @MainActor in
+            try? await Task.sleep(nanoseconds: 120_000_000)
+            withAnimation(Liquid.press) { pressed = false }
+            withAnimation(Liquid.morph) { state.expanded = true }
+        }
+    }
+
+    private func collapse() {
+        withAnimation(Liquid.morph) { state.expanded = false }
     }
 
     // MARK: Siap
@@ -55,7 +123,7 @@ struct IslandView: View {
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
         .contentShape(Rectangle())
-        .onTapGesture { state.expanded = true }
+        .onTapGesture(perform: expand)
     }
 
     private var idleExpanded: some View {
@@ -66,7 +134,7 @@ struct IslandView: View {
                     .foregroundStyle(Palette.green)
                 Spacer()
                 Text("v\(Config.version)").font(.system(size: 11)).foregroundStyle(Palette.muted)
-                closeButton { state.expanded = false }
+                closeButton(action: collapse)
             }
             HStack(spacing: 8) {
                 chip("Mulai Catat", icon: "record.circle", color: Palette.green, filled: true) { controller.start() }
@@ -83,40 +151,36 @@ struct IslandView: View {
 
     private var recordingCompact: some View {
         HStack(spacing: 10) {
-            Circle().fill(Palette.red).frame(width: 8, height: 8)
-            Text(timeString(state.elapsed))
-                .font(.system(size: 13, weight: .semibold, design: .rounded).monospacedDigit())
+            RecordingDot()
+            ElapsedText(meter: meter, size: 13)
             Spacer()
             if !state.marks.isEmpty {
                 Label("\(state.marks.count)", systemImage: "star.fill")
                     .font(.system(size: 11, weight: .semibold)).foregroundStyle(Palette.orange)
             }
-            Waveform(level: state.level, tick: state.elapsed)
+            Waveform(meter: meter)
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
         .contentShape(Rectangle())
-        .onTapGesture { state.expanded = true }
+        .onTapGesture(perform: expand)
     }
 
     private var recordingExpanded: some View {
         VStack(alignment: .leading, spacing: 8) {
             HStack(spacing: 8) {
-                Circle().fill(Palette.red).frame(width: 8, height: 8)
-                Text(timeString(state.elapsed))
-                    .font(.system(size: 22, weight: .bold, design: .rounded).monospacedDigit())
+                RecordingDot()
+                ElapsedText(meter: meter, size: 22)
                 Text(state.micName).font(.system(size: 11)).foregroundStyle(Palette.muted).lineLimit(1)
                 Spacer()
-                Waveform(level: state.level, tick: state.elapsed)
-                closeButton(systemImage: "chevron.up") { state.expanded = false }
+                Waveform(meter: meter)
+                closeButton(systemImage: "chevron.up", action: collapse)
             }
-            Text(state.liveText.isEmpty ? "Mendengarkan…" : state.liveText)
-                .font(.system(size: 15, weight: .medium))
-                .lineLimit(3)
-                .frame(maxWidth: .infinity, alignment: .bottomLeading)
-                .frame(height: 58, alignment: .bottomLeading)
+            LiveText(meter: meter)
             HStack(spacing: 8) {
                 chip(state.marks.isEmpty ? "Tandai penting" : "Tandai penting (\(state.marks.count))",
-                     icon: "star.fill", color: Palette.orange) { controller.markImportant() }
+                     icon: "star.fill", color: Palette.orange) {
+                    withAnimation(Liquid.press) { controller.markImportant() }
+                }
                 if let warning = state.warning {
                     Text(warning).font(.system(size: 10)).foregroundStyle(Palette.muted).lineLimit(2)
                 }
@@ -127,7 +191,7 @@ struct IslandView: View {
                         .frame(width: 34, height: 34)
                         .background(Circle().fill(Palette.orange))
                 }
-                .buttonStyle(.plain)
+                .buttonStyle(PressableStyle())
                 .help("Selesai & susun MoM (⌃⌥M)")
             }
         }
@@ -138,21 +202,21 @@ struct IslandView: View {
     private var processing: some View {
         let steps = ["Mentranskrip", "Mengoreksi", "Menyusun MoM"]
         return VStack(alignment: .leading, spacing: 10) {
-            HStack {
+            HStack(spacing: 8) {
                 ProgressView().controlSize(.small).tint(.white)
-                Text("Memproses rapat \(timeString(state.elapsed))").font(.system(size: 14, weight: .semibold))
+                Text("Memproses rapat").font(.system(size: 14, weight: .semibold))
+                ElapsedText(meter: meter, size: 14).foregroundStyle(Palette.muted)
             }
             HStack(spacing: 6) {
                 ForEach(steps.indices, id: \.self) { i in
                     VStack(alignment: .leading, spacing: 4) {
-                        Capsule()
-                            .fill(stepColor(i))
-                            .frame(height: 4)
+                        Capsule().fill(stepColor(i)).frame(height: 4)
                         Text(steps[i]).font(.system(size: 10, weight: .medium))
                             .foregroundStyle(i <= stepIndex ? .white : Palette.muted)
                     }
                 }
             }
+            .animation(Liquid.morph, value: state.step)
             Text(state.stepDetail).font(.system(size: 11)).foregroundStyle(Palette.muted).lineLimit(1)
         }
     }
@@ -212,7 +276,7 @@ struct IslandView: View {
                 .foregroundStyle(filled ? .white : color)
                 .background(Capsule().fill(filled ? color : Palette.chip))
         }
-        .buttonStyle(.plain)
+        .buttonStyle(PressableStyle())
     }
 
     private func closeButton(systemImage: String = "xmark", action: @escaping () -> Void) -> some View {
@@ -222,32 +286,87 @@ struct IslandView: View {
                 .frame(width: 22, height: 22)
                 .background(Circle().fill(Palette.chip))
         }
-        .buttonStyle(.plain)
-    }
-
-    private func timeString(_ seconds: TimeInterval) -> String {
-        let total = Int(seconds)
-        let (h, m, s) = (total / 3600, total % 3600 / 60, total % 60)
-        return h > 0 ? String(format: "%02d:%02d:%02d", h, m, s) : String(format: "%02d:%02d", m, s)
+        .buttonStyle(PressableStyle())
     }
 }
 
-/// Gelombang suara sederhana: 5 batang yang tingginya mengikuti level audio.
+// MARK: - Komponen kecil yang mengamati LiveMeter
+// Hanya komponen ini yang digambar ulang saat timer, level suara, atau transkrip live berubah.
+
+private func timeString(_ seconds: TimeInterval) -> String {
+    let total = Int(seconds)
+    let (h, m, s) = (total / 3600, total % 3600 / 60, total % 60)
+    return h > 0 ? String(format: "%02d:%02d:%02d", h, m, s) : String(format: "%02d:%02d", m, s)
+}
+
+private struct ElapsedText: View {
+    @ObservedObject var meter: LiveMeter
+    let size: CGFloat
+
+    var body: some View {
+        Text(timeString(meter.elapsed))
+            .font(.system(size: size, weight: size > 16 ? .bold : .semibold, design: .rounded).monospacedDigit())
+            .contentTransition(.numericText())
+            .animation(.snappy(duration: 0.25), value: Int(meter.elapsed))
+    }
+}
+
+private struct LiveText: View {
+    @ObservedObject var meter: LiveMeter
+
+    var body: some View {
+        Text(meter.liveText.isEmpty ? "Mendengarkan…" : meter.liveText)
+            .font(.system(size: 15, weight: .medium))
+            .lineLimit(3)
+            .frame(maxWidth: .infinity, alignment: .bottomLeading)
+            .frame(height: 58, alignment: .bottomLeading)
+            .animation(.easeOut(duration: 0.2), value: meter.liveText)
+    }
+}
+
+/// Gelombang suara: 5 batang yang mengikuti level audio, bergoyang halus ±20 fps saja.
 private struct Waveform: View {
-    let level: Float
-    let tick: TimeInterval
+    @ObservedObject var meter: LiveMeter
     private let weights: [CGFloat] = [0.5, 0.8, 1.0, 0.7, 0.45]
 
     var body: some View {
-        HStack(spacing: 2) {
-            ForEach(weights.indices, id: \.self) { i in
-                let wobble = 0.75 + 0.25 * sin(CGFloat(tick) * 3 + CGFloat(i))
-                Capsule()
-                    .fill(Color(red: 1.0, green: 0.27, blue: 0.23))
-                    .frame(width: 3, height: max(3, 16 * CGFloat(level) * weights[i] * wobble))
+        TimelineView(.animation(minimumInterval: 1.0 / 20)) { context in
+            let t = context.date.timeIntervalSinceReferenceDate
+            HStack(spacing: 2) {
+                ForEach(weights.indices, id: \.self) { i in
+                    let wobble = 0.7 + 0.3 * sin(CGFloat(t) * 7 + CGFloat(i) * 1.3)
+                    Capsule()
+                        .fill(Palette.red)
+                        .frame(width: 3, height: max(3, 16 * CGFloat(meter.level) * weights[i] * wobble))
+                }
             }
         }
         .frame(height: 16)
-        .animation(.easeOut(duration: 0.15), value: level)
+        .animation(.easeOut(duration: 0.12), value: meter.level)
+    }
+}
+
+/// Titik merah yang "bernapas" pelan selama merekam.
+private struct RecordingDot: View {
+    @State private var pulse = false
+
+    var body: some View {
+        Circle()
+            .fill(Palette.red)
+            .frame(width: 8, height: 8)
+            .scaleEffect(pulse ? 1.25 : 0.85)
+            .opacity(pulse ? 1 : 0.7)
+            .onAppear {
+                withAnimation(.easeInOut(duration: 0.9).repeatForever(autoreverses: true)) { pulse = true }
+            }
+    }
+}
+
+/// Tombol yang sedikit mengecil saat ditekan, lalu memantul kembali.
+private struct PressableStyle: ButtonStyle {
+    func makeBody(configuration: Configuration) -> some View {
+        configuration.label
+            .scaleEffect(configuration.isPressed ? 0.92 : 1)
+            .animation(Liquid.press, value: configuration.isPressed)
     }
 }
