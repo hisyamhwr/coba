@@ -27,6 +27,8 @@ final class AudioCapture: NSObject, SCStreamOutput, SCStreamDelegate {
     /// Potongan campuran 16 kHz mono, untuk transkrip live.
     var onSamples: ((AVAudioPCMBuffer) -> Void)?
     var onLevel: ((Float) -> Void)?
+    /// Masalah yang terdeteksi saat merekam (mis. mic hanya memberi hening total), untuk ditampilkan di pulau.
+    var onProblem: ((String) -> Void)?
     private(set) var micName = ""
     private(set) var systemAudioActive = false
 
@@ -39,6 +41,16 @@ final class AudioCapture: NSObject, SCStreamOutput, SCStreamDelegate {
     private var file: AVAudioFile?
     private var systemBuffer: [Float] = []
     private var lastLevel: Float = 0
+    private var running = false
+    private var configObserver: NSObjectProtocol?
+    // Diagnostik (ditulis ke rekaman.log): membedakan mic tanpa izin, mic pelan, dan audio sistem yang tidak masuk.
+    private var micFormatText = ""
+    private var micFrames = 0
+    private var micPeak: Float = 0
+    private var micRestarts = 0
+    private var silenceReported = false
+    private var systemFrames = 0
+    private var systemPeak: Float = 0
     private let lock = NSLock()
     private let systemQueue = DispatchQueue(label: "meetingnotes.system-audio")
     private let writeQueue = DispatchQueue(label: "meetingnotes.writer")
@@ -66,17 +78,15 @@ final class AudioCapture: NSObject, SCStreamOutput, SCStreamDelegate {
             commonFormat: .pcmFormatFloat32,
             interleaved: false
         )
-        micName = AVCaptureDevice.default(for: .audio)?.localizedName ?? "mikrofon"
-
-        let input = engine.inputNode
-        let inputFormat = input.outputFormat(forBus: 0)
-        guard inputFormat.sampleRate > 0, inputFormat.channelCount > 0 else { throw CaptureError.noMicrophone }
-        micConverter = Self.makeConverter(from: inputFormat)
-        input.installTap(onBus: 0, bufferSize: 4096, format: inputFormat) { [weak self] buffer, _ in
-            self?.handleMic(buffer)
+        running = true
+        try startMic()
+        // Mic berganti (AirPods tersambung, Zoom mengubah format mic): AVAudioEngine berhenti sendiri dan rekaman
+        // akan hening sampai selesai. Pasang ulang mic agar rekaman tetap jalan.
+        configObserver = NotificationCenter.default.addObserver(
+            forName: .AVAudioEngineConfigurationChange, object: engine, queue: .main
+        ) { [weak self] _ in
+            self?.restartMic()
         }
-        engine.prepare()
-        try engine.start()
 
         do {
             try await startSystemAudio()
@@ -90,6 +100,9 @@ final class AudioCapture: NSObject, SCStreamOutput, SCStreamDelegate {
 
     /// Hentikan rekaman dan tutup file WAV.
     func stop() {
+        running = false
+        if let configObserver { NotificationCenter.default.removeObserver(configObserver) }
+        configObserver = nil
         engine.inputNode.removeTap(onBus: 0)
         engine.stop()
         if let active = scStream {
@@ -97,14 +110,84 @@ final class AudioCapture: NSObject, SCStreamOutput, SCStreamDelegate {
         }
         scStream = nil
         writeQueue.sync { file = nil }
+        let log = output.deletingLastPathComponent().appendingPathComponent("rekaman.log")
+        try? diagnostics().write(to: log, atomically: true, encoding: .utf8)
+    }
+
+    /// Ringkasan kondisi rekaman untuk rekaman.log.
+    func diagnostics() -> String {
+        lock.lock()
+        let sysFrames = systemFrames
+        let sysPeak = systemPeak
+        lock.unlock()
+        let micStatus: String
+        switch AVCaptureDevice.authorizationStatus(for: .audio) {
+        case .authorized: micStatus = "diizinkan"
+        case .denied: micStatus = "DITOLAK"
+        case .restricted: micStatus = "dibatasi"
+        case .notDetermined: micStatus = "belum ditanya"
+        @unknown default: micStatus = "tidak diketahui"
+        }
+        let version = Bundle.main.object(forInfoDictionaryKey: "CFBundleShortVersionString") as? String ?? "?"
+        return """
+        Meeting Notes v\(version)
+        Mikrofon        : \(micName) (\(micFormatText)), izin \(micStatus)
+        Mic diterima    : \(String(format: "%.1f", Double(micFrames) / 16000)) detik, puncak \(Self.describe(micPeak))
+        Mic dipasang ulang: \(micRestarts)x
+        Audio sistem    : \(systemAudioActive ? "aktif" : "TIDAK aktif"), \
+        \(String(format: "%.1f", Double(sysFrames) / 16000)) detik diterima, puncak \(Self.describe(sysPeak))
+
+        """
+    }
+
+    private static func describe(_ peak: Float) -> String {
+        guard peak > 0 else { return "0 (HENING TOTAL)" }
+        return String(format: "%.4f (%.0f dBFS)", peak, 20 * log10(peak))
     }
 
     // MARK: - Mikrofon (jam utama)
+
+    private func startMic() throws {
+        micName = AVCaptureDevice.default(for: .audio)?.localizedName ?? "mikrofon"
+        let input = engine.inputNode
+        let inputFormat = input.outputFormat(forBus: 0)
+        guard inputFormat.sampleRate > 0, inputFormat.channelCount > 0 else { throw CaptureError.noMicrophone }
+        micFormatText = "\(Int(inputFormat.sampleRate)) Hz, \(inputFormat.channelCount) kanal"
+        micConverter = Self.makeConverter(from: inputFormat)
+        input.installTap(onBus: 0, bufferSize: 4096, format: inputFormat) { [weak self] buffer, _ in
+            self?.handleMic(buffer)
+        }
+        engine.prepare()
+        try engine.start()
+    }
+
+    private func restartMic() {
+        guard running else { return }
+        engine.inputNode.removeTap(onBus: 0)
+        engine.stop()
+        micRestarts += 1
+        do {
+            try startMic()
+        } catch {
+            onProblem?("Mic terputus dan gagal disambung ulang. Selesaikan lalu mulai rekam lagi.")
+        }
+    }
 
     private func handleMic(_ buffer: AVAudioPCMBuffer) {
         guard let converter = micConverter else { return }
         let mic = Self.convert(buffer, with: converter)
         guard !mic.isEmpty else { return }
+        var peak: Float = 0
+        vDSP_maxmgv(mic, 1, &peak, vDSP_Length(mic.count))
+        micPeak = max(micPeak, peak)
+        micFrames += mic.count
+        // Sampel nol mutlak selama 3 detik = macOS memberi hening karena izin mic tidak cocok lagi dengan
+        // aplikasi (terjadi setelah build ulang). Ruangan sepi pun tetap punya derau, tidak pernah nol mutlak.
+        if !silenceReported, micFrames >= 48000, micPeak == 0 {
+            silenceReported = true
+            onProblem?("Mic hanya memberi hening (izin macOS tersangkut). Jalankan ./mac/build.sh --reset-izin "
+                + "lalu buka ulang app.")
+        }
 
         lock.lock()
         let take = min(mic.count, systemBuffer.count)
@@ -157,11 +240,11 @@ final class AudioCapture: NSObject, SCStreamOutput, SCStreamDelegate {
 
     func stream(_ stream: SCStream, didOutputSampleBuffer sampleBuffer: CMSampleBuffer, of type: SCStreamOutputType) {
         guard type == .audio, sampleBuffer.isValid else { return }
+        // Format dibaca apa adanya dari buffer (interleaved atau tidak) agar sampel tidak salah tafsir.
+        guard let description = sampleBuffer.formatDescription else { return }
+        let format = AVAudioFormat(cmAudioFormatDescription: description)
         try? sampleBuffer.withAudioBufferList { list, _ in
-            guard let asbd = sampleBuffer.formatDescription?.audioStreamBasicDescription,
-                  let format = AVAudioFormat(standardFormatWithSampleRate: asbd.mSampleRate,
-                                             channels: asbd.mChannelsPerFrame),
-                  let pcm = AVAudioPCMBuffer(pcmFormat: format, bufferListNoCopy: list.unsafePointer)
+            guard let pcm = AVAudioPCMBuffer(pcmFormat: format, bufferListNoCopy: list.unsafePointer)
             else { return }
             if systemConverter == nil || systemFormat != format {
                 systemConverter = Self.makeConverter(from: format)
@@ -169,7 +252,12 @@ final class AudioCapture: NSObject, SCStreamOutput, SCStreamDelegate {
             }
             guard let converter = systemConverter else { return }
             let samples = Self.convert(pcm, with: converter)
+            guard !samples.isEmpty else { return }
+            var peak: Float = 0
+            vDSP_maxmgv(samples, 1, &peak, vDSP_Length(samples.count))
             lock.lock()
+            systemFrames += samples.count
+            systemPeak = max(systemPeak, peak)
             systemBuffer.append(contentsOf: samples)
             if systemBuffer.count > Self.maxSystemBacklog {
                 systemBuffer.removeFirst(systemBuffer.count - Self.maxSystemBacklog)

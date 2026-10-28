@@ -48,6 +48,9 @@ final class MeetingController {
         capture.onLevel = { [weak self] level in
             Task { @MainActor in self?.meter.level = level }
         }
+        capture.onProblem = { [weak self] message in
+            Task { @MainActor in self?.state.warning = message }
+        }
 
         Task { @MainActor in
             guard await AudioCapture.requestMicAccess() else {

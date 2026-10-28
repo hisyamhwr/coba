@@ -2,6 +2,18 @@
 
 Format versi: `MAYOR.FITUR.PERBAIKAN` (lihat [docs/ROADMAP.md](docs/ROADMAP.md)).
 
+## 2.0.8
+
+- Perbaikan rekaman hening (suara sendiri dan peserta meeting tidak terekam): izin Microphone dan Screen & System
+  Audio Recording macOS terikat ke biner lama setiap kali app di-build ulang, sehingga izin tampak aktif tetapi
+  macOS hanya memberi hening. `build.sh` kini menandatangani app dengan bundle ID agar izin tetap berlaku, mereset
+  izin lama sekali, dan punya opsi `--reset-izin`.
+- Pulau memperingatkan bila mic hanya memberi hening total selama 3 detik pertama.
+- Mic dipasang ulang otomatis bila perangkat berganti di tengah rapat (AirPods, Zoom mengubah format mic);
+  sebelumnya sisa rekaman menjadi hening.
+- Audio sistem dibaca sesuai format aslinya.
+- `rekaman.log` di folder rekaman: nama/format mic, izin, puncak level mic dan audio sistem, untuk diagnosis.
+
 ## 2.0.7
 
 - `build.sh` memeriksa library Python (soundfile, faster-whisper, dll.) pada Python yang dipakai aplikasi dan

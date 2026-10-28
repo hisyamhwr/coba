@@ -60,3 +60,4 @@ System Settings → General → Login Items → **+** → pilih `mac/build/Meeti
 | Widget menulis "Audio Zoom/Meet/Teams belum terekam" | Berikan izin Screen & System Audio Recording, lalu buka ulang aplikasi |
 | "Python tidak ditemukan" | Jalankan ulang `./mac/build.sh` setelah `conda activate meeting` |
 | Gagal memproses | Rekaman aman di `~/MeetingNotes/rekaman/<waktu>/meeting.wav`; proses ulang dengan `python -m meeting_notes proses <file>` |
+| Rekaman hening / "Tidak ada suara yang terdeteksi" / pulau menulis "Mic hanya memberi hening" | `killall MeetingNotes; ./mac/build.sh --reset-izin`, buka app, izinkan Microphone & Speech Recognition, nyalakan Meeting Notes di Screen & System Audio Recording, buka ulang app. Lihat `rekaman.log` di folder rekaman (puncak 0 = hening total) |
