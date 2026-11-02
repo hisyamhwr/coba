@@ -28,7 +28,17 @@ Corrections = dict[tuple[str, str], int]
 
 
 def _bullets(items: list[str]) -> list[str]:
-    return [f"- {item}" for item in items] or ["- -"]
+    return [f"- {_inline(item)}" for item in items] or ["- -"]
+
+
+def _inline(text: str) -> str:
+    """Satu baris Markdown: baris baru dari Claude tidak memecah daftar."""
+    return " ".join(str(text).split())
+
+
+def _cell(text: str) -> str:
+    """Isi sel tabel Markdown: tanpa baris baru dan tanda | yang memecah kolom."""
+    return _inline(text).replace("|", "\\|")
 
 
 def render_markdown(
@@ -54,14 +64,16 @@ def render_markdown(
         if summary.action_items:
             lines += ["| No | Tugas | Penanggung Jawab | Tenggat |", "|---|---|---|---|"]
             lines += [
-                f"| {i} | {a.task} | {a.owner} | {a.deadline} |".replace("\n", " ")
+                f"| {i} | {_cell(a.task)} | {_cell(a.owner)} | {_cell(a.deadline)} |"
                 for i, a in enumerate(summary.action_items, 1)
             ]
         else:
             lines.append("- -")
+        if summary.risks:
+            lines += ["", "## Risiko & Blocker", "", *_bullets(summary.risks)]
         if summary.highlights:
             lines += ["", "## Momen Penting", ""]
-            lines += [f"- `{h.time}` {h.summary}" for h in summary.highlights]
+            lines += [f"- `{h.time}` {_inline(h.summary)}" for h in summary.highlights]
         lines += ["", "## Pembahasan per Agenda", ""]
         for i, item in enumerate(summary.agenda, 1):
             lines += [f"### {i}. {item.topic} `{item.start_time}`", "", *_bullets(item.points)]
@@ -78,7 +90,7 @@ def render_markdown(
         lines += ["_(tidak ada suara terdeteksi)_", ""]
     if corrections:
         lines += ["## Lampiran: Koreksi Otomatis", "", "| Tertulis | Dikoreksi menjadi | Jumlah |", "|---|---|---|"]
-        lines += [f"| {wrong} | {correct} | {n} |" for (wrong, correct), n in corrections.items()]
+        lines += [f"| {_cell(wrong)} | {_cell(correct)} | {n} |" for (wrong, correct), n in corrections.items()]
         lines.append("")
     lines += ["---", f"_{FOOTER}_"]
     return "\n".join(lines) + "\n"
@@ -119,6 +131,10 @@ def write_docx(
                     cell.text = text
         else:
             bullets([])
+
+        if summary.risks:
+            doc.add_heading("Risiko & Blocker", level=1)
+            bullets(summary.risks)
 
         if summary.highlights:
             doc.add_heading("Momen Penting", level=1)

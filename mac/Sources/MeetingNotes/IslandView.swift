@@ -363,6 +363,7 @@ struct IslandView: View {
                         .foregroundStyle(Palette.muted)
                         .contentTransition(.numericText())
                 }
+                iconButton("xmark", help: "Batalkan (rekaman tetap aman)") { controller.cancelProcessing() }
             }
             ProgressBar(fraction: progressFraction)
         }
@@ -387,26 +388,42 @@ struct IslandView: View {
     // MARK: Selesai / gagal
 
     private var done: some View {
-        VStack(alignment: .leading, spacing: 10) {
+        let summarized = state.result?.summarized != false
+        return VStack(alignment: .leading, spacing: 10) {
             HStack(spacing: 6) {
-                CheckBadge()
-                    .background(Confetti())
-                Text("MoM siap").foregroundStyle(Palette.green)
+                if summarized {
+                    CheckBadge()
+                        .background(Confetti())
+                    Text("MoM siap").foregroundStyle(Palette.green)
+                } else {
+                    Image(systemName: "exclamationmark.triangle.fill").foregroundStyle(Palette.orange)
+                    Text("Transkrip tersimpan, MoM belum tersusun").foregroundStyle(Palette.orange)
+                }
                 Spacer()
                 iconButton("xmark", help: "Tutup") { controller.dismiss() }
             }
             .font(Typo.label)
-            Text(state.result?.title ?? "Rapat")
-                .font(Typo.heading)
-                .lineLimit(1)
+            if summarized {
+                Text(state.result?.title ?? "Rapat")
+                    .font(Typo.heading)
+                    .lineLimit(1)
+            } else {
+                Text(state.result?.note ?? "Penyusunan MoM gagal.")
+                    .font(.system(size: 12, weight: .regular))
+                    .foregroundStyle(Palette.muted)
+                    .lineLimit(2)
+                    .textSelection(.enabled)
+            }
             HStack(spacing: 6) {
-                stat(state.result?.decisions ?? 0, "keputusan", icon: "checkmark.seal.fill", color: Palette.green)
-                stat(state.result?.action_items ?? 0, "tugas", icon: "checklist", color: Palette.blue)
-                if !state.marks.isEmpty {
-                    stat(state.marks.count, nil, icon: "star.fill", color: Palette.orange)
+                if summarized {
+                    stat(state.result?.decisions ?? 0, "keputusan", icon: "checkmark.seal.fill", color: Palette.green)
+                    stat(state.result?.action_items ?? 0, "tugas", icon: "checklist", color: Palette.blue)
+                    if !state.marks.isEmpty {
+                        stat(state.marks.count, nil, icon: "star.fill", color: Palette.orange)
+                    }
                 }
                 Spacer()
-                iconButton(copied ? "checkmark" : "doc.on.doc", help: "Salin MoM") {
+                iconButton(copied ? "checkmark" : "doc.on.doc", help: summarized ? "Salin MoM" : "Salin transkrip") {
                     controller.copyResult()
                     haptic()
                     withAnimation(Liquid.press) { copied = true }
@@ -416,7 +433,13 @@ struct IslandView: View {
                     }
                 }
                 iconButton("folder", help: "Buka folder notulen") { controller.openFolder() }
-                primaryButton("Buka MoM", icon: "doc.text.fill", gradient: Palette.done) { controller.openResult() }
+                if summarized {
+                    primaryButton("Buka MoM", icon: "doc.text.fill", gradient: Palette.done) { controller.openResult() }
+                } else {
+                    primaryButton("Susun ulang", icon: "arrow.clockwise", gradient: Palette.record) {
+                        controller.retry()
+                    }
+                }
             }
         }
     }

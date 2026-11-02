@@ -11,63 +11,21 @@ selesai akan dikerjakan ulang oleh `proses`.
 
 import json
 import os
-import struct
 import time
 from collections.abc import Callable
 from pathlib import Path
 
-import numpy as np
-
-from .transcriber import FAST_MODEL, SAMPLE_RATE, Segment, Transcriber, chunk_bounds
+from .transcriber import FAST_MODEL, SAMPLE_RATE, Segment, Transcriber, iter_chunks
+from .wavio import GrowingWav
 
 STATE_FILE = "transkrip_parsial.json"
 TRACKS = {"sistem": "sistem.wav", "mic": "mic.wav"}
 LIVE_CHUNK_SECONDS = 120
-# Bila transkripsi butuh lebih dari 60% durasi audio (dua jalur bergantian), Mac tidak akan mengejar rapat:
-# turun ke model turbo yang +-3x lebih cepat.
-MAX_REALTIME_FACTOR = 0.6
-
-
-class GrowingWav:
-    """Membaca WAV PCM 16 kHz mono yang masih ditulis (ukuran di header belum diperbarui)."""
-
-    def __init__(self, path: Path):
-        self.path = path
-        self.data_offset: int | None = None
-        self.sample_width = 2
-
-    def _find_data(self) -> bool:
-        if not self.path.exists():
-            return False
-        with self.path.open("rb") as f:
-            header = f.read(65536)
-        if header[:4] != b"RIFF" or header[8:12] != b"WAVE":
-            return False
-        pos = 12
-        while pos + 8 <= len(header):
-            chunk_id = header[pos:pos + 4]
-            size = struct.unpack("<I", header[pos + 4:pos + 8])[0]
-            if chunk_id == b"fmt ":
-                bits = struct.unpack("<H", header[pos + 22:pos + 24])[0]
-                self.sample_width = bits // 8
-            elif chunk_id == b"data":
-                self.data_offset = pos + 8
-                return True
-            pos += 8 + size + (size & 1)
-        return False
-
-    def samples(self) -> int:
-        if self.data_offset is None and not self._find_data():
-            return 0
-        return max(0, (self.path.stat().st_size - self.data_offset) // self.sample_width)
-
-    def read(self, start: int, end: int) -> np.ndarray:
-        with self.path.open("rb") as f:
-            f.seek(self.data_offset + start * self.sample_width)
-            raw = f.read((end - start) * self.sample_width)
-        if self.sample_width == 4:
-            return np.frombuffer(raw[: len(raw) // 4 * 4], dtype="<f4").astype(np.float32)
-        return np.frombuffer(raw[: len(raw) // 2 * 2], dtype="<i2").astype(np.float32) / 32768
+# Bila transkripsi butuh lebih dari 40% durasi audio (dua jalur bergantian), Mac terlalu sibuk selama rapat
+# (Zoom/Teams bisa tersendat) dan berisiko tidak mengejar: turun ke model turbo yang +-3x lebih cepat.
+MAX_REALTIME_FACTOR = 0.4
+# Jeda setelah error (mis. model gagal diunduh) sebelum mencoba lagi; proses akhir tetap mengerjakan sisanya.
+ERROR_BACKOFF_SECONDS = 30
 
 
 def load_state(folder: Path) -> dict:
@@ -96,17 +54,14 @@ def advance(folder: Path, state: dict, transcriber: Transcriber, name: str, read
     """Transkripsi potongan lengkap yang belum dikerjakan. Mengembalikan detik audio yang ditranskripsi."""
     until, segments = track_segments(state, name)
     start = int(until * SAMPLE_RATE)
-    available = reader.samples()
-    if available - start < (LIVE_CHUNK_SECONDS + 20) * SAMPLE_RATE:
+    if reader.samples() - start < (LIVE_CHUNK_SECONDS + 20) * SAMPLE_RATE:
         return 0.0
-    audio = reader.read(start, available)
-    # Potongan terakhir belum lengkap (rapat masih berjalan): dikerjakan pada putaran berikutnya.
-    bounds = chunk_bounds(audio, chunk_seconds=LIVE_CHUNK_SECONDS)[:-1]
     done = 0.0
-    for a, b in bounds:
-        segments += transcriber.transcribe_chunk(audio[a:b], (start + a) / SAMPLE_RATE)
-        until = (start + b) / SAMPLE_RATE
-        done += (b - a) / SAMPLE_RATE
+    # Potongan terakhir belum lengkap (rapat masih berjalan): dikerjakan pada putaran berikutnya.
+    for pos, chunk in iter_chunks(reader, start, LIVE_CHUNK_SECONDS, include_last=False):
+        segments += transcriber.transcribe_chunk(chunk, pos / SAMPLE_RATE)
+        until = (pos + len(chunk)) / SAMPLE_RATE
+        done += len(chunk) / SAMPLE_RATE
         state[name] = {"until": until, "segments": [[s.start, s.end, s.text] for s in segments]}
         state["model"] = transcriber.model_size
         save_state(folder, state)
@@ -125,7 +80,12 @@ def follow(folder: Path, transcriber: Transcriber, log: Callable[[str], None] = 
     while not should_stop() and os.getppid() == parent:
         for name, reader in readers.items():
             began = time.monotonic()
-            seconds = advance(folder, state, transcriber, name, reader)
+            try:
+                seconds = advance(folder, state, transcriber, name, reader)
+            except Exception as exc:  # noqa: BLE001 - jangan berhenti; proses akhir mengerjakan sisanya
+                log(f"{name}: gagal mentranskripsi ({type(exc).__name__}: {exc}); dicoba lagi nanti")
+                time.sleep(ERROR_BACKOFF_SECONDS)
+                continue
             if not seconds:
                 continue
             factor = (time.monotonic() - began) / seconds

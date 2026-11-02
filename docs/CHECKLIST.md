@@ -114,7 +114,9 @@ Server tidak punya Swift/macOS, jadi semua butir di bawah ⚠️ sampai berhasil
   - ☑️ Hening dipangkas sebelum Whisper; model dipilih otomatis (large-v3 bila Apple Silicon RAM ≥ 16 GB)
   - ⚠️ Transkripsi di latar belakang selama rapat (`ikuti`), sehingga setelah rapat hanya sisa ±2 menit yang
     ditranskripsi (Python teruji; app Mac menunggu QA)
-- ⬜ **2.4.0** Perpustakaan rapat: riwayat semua rapat, pencarian, dan "Tanya ke rapat"
-- ⬜ **2.5.0** Label pembicara per orang untuk peserta online (Whisper lokal); sudah ada di mesin cloud sejak 1.2.0
+- ⚠️ **3.0.0** Siap rapat panjang (Python ☑️ teruji termasuk simulasi rapat 70 menit dan MoM dengan Claude
+  sungguhan; app Mac menunggu QA rapat ≥ 1 jam)
+- ⬜ **3.1.0** Perpustakaan rapat: riwayat semua rapat, pencarian, dan "Tanya ke rapat"
+- ⬜ **3.2.0** Label pembicara per orang untuk peserta online (Whisper lokal); sudah ada di mesin cloud sejak 1.2.0
 
 Dibatalkan atas permintaan: integrasi kalender, deteksi rapat otomatis, dan bagikan ke Slack/Notion/email.

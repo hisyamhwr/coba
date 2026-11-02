@@ -23,6 +23,12 @@ final class AudioCapture: NSObject, SCStreamOutput, SCStreamDelegate {
     static let format = AVAudioFormat(commonFormat: .pcmFormatFloat32, sampleRate: 16000, channels: 1, interleaved: false)!
     /// Batas antrean audio sistem (2 detik) agar tidak menumpuk jika jam mic dan sistem sedikit berbeda.
     private static let maxSystemBacklog = 32000
+    /// Cadangan audio sistem (250 ms) sebelum mulai dipakai. Audio Zoom/Teams datang tidak serata mic; tanpa
+    /// cadangan, setiap kali datang sedikit terlambat celahnya terisi hening sehingga suara peserta "patah-patah"
+    /// dan akurasi transkripsi turun.
+    private static let systemPrebuffer = 4000
+    /// Campuran mic + meeting dikecilkan sedikit agar tidak pecah (clipping) saat keduanya keras bersamaan.
+    private static let mixGain: Float = 0.8
 
     /// Potongan campuran 16 kHz mono, untuk transkrip live.
     var onSamples: ((AVAudioPCMBuffer) -> Void)?
@@ -44,6 +50,9 @@ final class AudioCapture: NSObject, SCStreamOutput, SCStreamDelegate {
     private var micFile: AVAudioFile?
     private var systemFile: AVAudioFile?
     private var systemBuffer: [Float] = []
+    /// Audio sistem sedang dipakai (cadangan sudah terisi); kembali false saat antrean habis (meeting hening).
+    private var systemFlowing = false
+    private var writeFailed = false
     private var lastLevel: Float = 0
     private var running = false
     private var configObserver: NSObjectProtocol?
@@ -150,11 +159,20 @@ final class AudioCapture: NSObject, SCStreamOutput, SCStreamDelegate {
         logQueue.sync {}
     }
 
+    /// Durasi yang benar-benar terekam (jam audio), untuk timer dan waktu "Penting". Tidak ikut berjalan saat
+    /// Mac tidur atau mic sempat terputus, sehingga waktu tanda selalu cocok dengan rekaman.
+    var recordedSeconds: TimeInterval {
+        lock.lock()
+        defer { lock.unlock() }
+        return Double(micFrames) / 16000
+    }
+
     /// Ringkasan kondisi rekaman untuk rekaman.log.
     func diagnostics() -> String {
         lock.lock()
         let sysFrames = systemFrames
         let sysPeak = systemPeak
+        let micSeconds = Double(micFrames) / 16000
         lock.unlock()
         let micStatus: String
         switch AVCaptureDevice.authorizationStatus(for: .audio) {
@@ -168,7 +186,7 @@ final class AudioCapture: NSObject, SCStreamOutput, SCStreamDelegate {
         return """
         Meeting Notes v\(version)
         Mikrofon        : \(micName) (\(micFormatText)), izin \(micStatus)
-        Mic diterima    : \(String(format: "%.1f", Double(micFrames) / 16000)) detik, puncak \(Self.describe(micPeak))
+        Mic diterima    : \(String(format: "%.1f", micSeconds)) detik, puncak \(Self.describe(micPeak))
         Mic dipasang ulang: \(micRestarts)x
         Audio sistem    : \(systemAudioActive ? "aktif" : "TIDAK aktif"), dipasang ulang \(systemRestarts)x, \
         \(String(format: "%.1f", Double(sysFrames) / 16000)) detik diterima, puncak \(Self.describe(sysPeak))
@@ -208,7 +226,15 @@ final class AudioCapture: NSObject, SCStreamOutput, SCStreamDelegate {
         let micText = Self.describe(windowMicPeak)
         windowMicPeak = 0
         let sysText = sysFrames == 0 ? "TIDAK ADA DATA" : Self.describe(sysPeak)
-        note("[\(micFrames / 16000) dtk] mic \(micName): \(micText) | audio meeting: \(sysText)")
+        note("[\(Int(recordedSeconds)) dtk] mic \(micName): \(micText) | audio meeting: \(sysText)")
+    }
+
+    /// Dipanggil pengendali bila jam audio berhenti bergerak beberapa detik (mis. setelah Mac bangun dari tidur,
+    /// atau mic berhenti tanpa pemberitahuan): pasang ulang mic agar sisa rapat tetap terekam.
+    func recoverIfStalled() {
+        guard running else { return }
+        note("Mic berhenti mengirim suara (engine \(engine.isRunning ? "jalan" : "berhenti")); dipasang ulang")
+        restartMic()
     }
 
     private func restartMic() {
@@ -233,26 +259,34 @@ final class AudioCapture: NSObject, SCStreamOutput, SCStreamDelegate {
         vDSP_maxmgv(mic, 1, &peak, vDSP_Length(mic.count))
         micPeak = max(micPeak, peak)
         windowMicPeak = max(windowMicPeak, peak)
+        lock.lock()
         let before = micFrames / 160_000
         micFrames += mic.count
-        if micFrames / 160_000 != before { logWindow() }
+        let frames = micFrames
+        lock.unlock()
+        if frames / 160_000 != before { logWindow() }
         // Sampel nol mutlak selama 3 detik = macOS memberi hening karena izin mic tidak cocok lagi dengan
         // aplikasi (terjadi setelah build ulang). Ruangan sepi pun tetap punya derau, tidak pernah nol mutlak.
-        if !silenceReported, micFrames >= 48000, micPeak == 0 {
+        if !silenceReported, frames >= 48000, micPeak == 0 {
             silenceReported = true
             onProblem?("Mic hanya memberi hening (izin macOS tersangkut). Jalankan ./mac/build.sh --reset-izin "
                 + "lalu buka ulang app.")
         }
 
         lock.lock()
-        let take = min(mic.count, systemBuffer.count)
+        if !systemFlowing, systemBuffer.count >= Self.systemPrebuffer { systemFlowing = true }
+        let take = systemFlowing ? min(mic.count, systemBuffer.count) : 0
         let system = Array(systemBuffer.prefix(take))
         systemBuffer.removeFirst(take)
+        // Antrean habis: meeting sedang hening (ScreenCaptureKit tidak mengirim apa-apa). Isi cadangan lagi
+        // sebelum dipakai, agar sambungan berikutnya tidak patah-patah.
+        if systemFlowing, systemBuffer.isEmpty { systemFlowing = false }
         lock.unlock()
 
         var mixed = mic
-        for i in 0..<system.count {
-            mixed[i] = max(-1, min(1, mixed[i] + system[i]))
+        for i in 0..<mixed.count {
+            let value = (mixed[i] + (i < system.count ? system[i] : 0)) * Self.mixGain
+            mixed[i] = max(-1, min(1, value))
         }
         // Jalur meeting diisi hening bila audio sistem belum masuk, agar ketiga file selalu sama panjang.
         var systemTrack = system
@@ -264,9 +298,17 @@ final class AudioCapture: NSObject, SCStreamOutput, SCStreamDelegate {
 
         writeQueue.async { [weak self] in
             guard let self else { return }
-            try? self.file?.write(from: out)
-            try? self.micFile?.write(from: micOut)
-            try? self.systemFile?.write(from: systemOut)
+            do {
+                try self.file?.write(from: out)
+                try self.micFile?.write(from: micOut)
+                try self.systemFile?.write(from: systemOut)
+            } catch {
+                // Biasanya disk penuh. Laporkan sekali agar pengguna tahu sebelum rapat selesai.
+                guard !self.writeFailed else { return }
+                self.writeFailed = true
+                self.note("Gagal menulis rekaman: \(error.localizedDescription)")
+                self.onProblem?("Rekaman gagal disimpan (disk penuh?). Kosongkan ruang disk lalu mulai rekam lagi.")
+            }
         }
         onSamples?(out)
         var rms: Float = 0

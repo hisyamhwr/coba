@@ -53,6 +53,7 @@ def main() -> None:
                 "title": result.title, "markdown": str(result.markdown_path),
                 "docx": str(result.docx_path) if result.docx_path else None,
                 "decisions": result.decisions, "action_items": result.action_items, "note": result.note,
+                "summarized": result.summarized,
             }), flush=True)
         else:
             print(f"Markdown : {result.markdown_path}")

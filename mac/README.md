@@ -61,3 +61,6 @@ System Settings → General → Login Items → **+** → pilih `mac/build/Meeti
 | "Python tidak ditemukan" | Jalankan ulang `./mac/build.sh` setelah `conda activate meeting` |
 | Gagal memproses | Rekaman aman di `~/MeetingNotes/rekaman/<waktu>/meeting.wav`; proses ulang dengan `python -m meeting_notes proses <file>` |
 | Rekaman hening / "Tidak ada suara yang terdeteksi" / pulau menulis "Mic hanya memberi hening" | `killall MeetingNotes; ./mac/build.sh --reset-izin`, buka app, izinkan Microphone & Speech Recognition, nyalakan Meeting Notes di Screen & System Audio Recording, buka ulang app. Lihat `rekaman.log` di folder rekaman (puncak 0 = hening total) |
+| Memproses terlalu lama / macet | Klik ✕ di pulau untuk membatalkan (rekaman aman), lalu **Proses ulang** |
+| Kartu oranye "MoM belum tersusun" (mis. batas pemakaian Claude) | Klik **Susun ulang**: transkrip yang tersimpan dipakai, tanpa mentranskripsi ulang |
+| Aplikasi tertutup paksa / Mac mati saat merekam | Rekaman tetap bisa diproses: `python -m meeting_notes proses ~/MeetingNotes/rekaman/<waktu>/meeting.wav` |

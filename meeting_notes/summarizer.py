@@ -82,6 +82,14 @@ topik; gabungkan obrolan kecil ke topik terdekat dan abaikan basa-basi.
 kalimat umum seperti "tim berdiskusi tentang progres".
 - Keputusan hanya yang benar-benar disepakati, bukan sekadar usulan. Penugasan seseorang \
 ("Rina tolong buat ...") adalah action item, bukan keputusan; jangan ditulis di keduanya.
+- Action item ditulis sebagai kalimat perintah yang spesifik, diawali kata kerja ("Kirim ...", \
+"Cek ...", "Deploy ..."), satu tugas per item; gabungkan tugas yang sama yang disebut berulang. \
+Tenggat ditulis seperti diucapkan ("Kamis", "akhir sprint") bila tanggal pasti tidak disebut.
+- `risks`: risiko, blocker, dan dependensi yang disebut di rapat (mis. menunggu tim lain, bug yang \
+belum beres, resource kurang, tenggat mepet, temuan pentest), beserta pihak terkait bila disebut. \
+Kosongkan bila tidak ada; jangan mengarang.
+- Rapat bisa berlangsung lebih dari 1 jam. Telusuri transkrip sampai akhir: setiap keputusan, \
+penugasan, dan risiko yang diucapkan harus tercatat, termasuk yang di bagian akhir rapat.
 - Label "Saya (mic)" adalah suara dari mikrofon pengguna (pengguna sendiri, dan orang lain di ruangan \
 yang sama bila rapat hibrida); "Peserta online" adalah suara peserta dari aplikasi meeting \
 (Zoom/Teams/Meet). Pakai label ini untuk membedakan siapa yang meminta dan siapa yang ditugaskan; \
@@ -128,6 +136,7 @@ class MeetingSummary(BaseModel):
     participants: list[str] = Field(description="Nama peserta yang disebut di transkrip")
     agenda: list[AgendaItem] = Field(description="Pembahasan per agenda, urut sesuai waktu")
     action_items: list[ActionItem] = Field(description="Tindak lanjut")
+    risks: list[str] = Field(description="Risiko, blocker, dan dependensi yang disebut di rapat")
     open_questions: list[str] = Field(description="Pertanyaan atau isu yang belum terjawab")
     highlights: list[Highlight] = Field(description="Ringkasan untuk tiap momen penting yang ditandai pengguna")
 

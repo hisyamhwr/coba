@@ -31,6 +31,33 @@ pesan galat/screenshot di langkah pertama yang gagal. Bug diperbaiki sebagai 2.0
 
 ---
 
+## QA 3.0.0: rapat panjang (wajib di Mac)
+
+### Sebelum rapat (±5 menit)
+
+1. `cd ~/coba/coba && conda activate meeting && killall MeetingNotes; git pull && ./mac/build.sh`
+2. `open mac/build/MeetingNotes.app`, lalu tes 1 menit (bicara + putar video): timer jalan, equalizer bergerak,
+   transkrip live muncul, selesai → MoM jadi.
+3. Pastikan izin menyala: Microphone, Speech Recognition, Screen & System Audio Recording (System Settings →
+   Privacy & Security), dan Dictation (System Settings → Keyboard).
+4. Mac dicolok ke charger, ruang disk kosong ≥ 2 GB (rekaman ±350 MB per jam).
+
+### Saat dan setelah rapat
+
+| # | Cek | Yang diharapkan |
+|---|---|---|
+| 1 | Mulai catat sebelum rapat dimulai | Timer merah berjalan; tidak ada peringatan oranye |
+| 2 | Selama rapat | Transkrip live mengikuti, kata terbaru tidak terpotong; Zoom/Teams tetap lancar |
+| 3 | Tekan Penting di momen kunci | Angka bertambah |
+| 4 | Selesai | MoM siap dalam ±1–3 menit (rapat 1 jam) |
+| 5 | Buka MoM | Agenda, keputusan, action item, Risiko & Blocker, Momen Penting; label "Saya (mic)" / "Peserta online" di transkrip |
+| 6 | Bila MoM gagal | Kartu oranye + **Susun ulang** (tidak mentranskripsi ulang) |
+
+Bila ada masalah, kirim isi `rekaman.log` dan `ikuti.log` di folder rekaman terakhir:
+`ls -t ~/MeetingNotes/rekaman | head -1`.
+
+---
+
 # QA 1.x
 
 ## Sudah diuji otomatis (di server, Linux)

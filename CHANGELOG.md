@@ -2,6 +2,48 @@
 
 Format versi: `MAYOR.FITUR.PERBAIKAN` (lihat [docs/ROADMAP.md](docs/ROADMAP.md)).
 
+## 3.0.0
+
+Siap untuk rapat panjang (1 jam lebih): audit menyeluruh, perbaikan bug, dan peningkatan akurasi. Tetap 100%
+lokal dan gratis (tanpa cloud).
+
+**Akurasi transkrip**
+- **Perbaikan besar:** petunjuk istilah (kamus, FE, flagging, ...) sebelumnya hanya dipakai Whisper untuk
+  30 detik pertama setiap potongan audio (perilaku mlx-whisper dengan `condition_on_previous_text=False`), jadi
+  75–95% audio ditranskripsi tanpa petunjuk. Kini audio dipotong sendiri per ≤ 28 detik di titik jeda, dan
+  setiap jendela mendapat petunjuk lengkap plus akhir kalimat jendela sebelumnya agar konteksnya bersambung.
+- Audio meeting tidak lagi "patah-patah": data audio dari Zoom/Teams yang datang tidak rata kini diberi
+  cadangan 250 ms. Sebelumnya setiap keterlambatan kecil diisi hening di tengah ucapan.
+- Campuran mic + meeting tidak lagi pecah (clipping) saat keduanya keras bersamaan.
+- Transkripsi latar belakang memakai Mac lebih ringan (turun ke model turbo bila memakan > 40% waktu) agar
+  Zoom/Teams tetap lancar, dan tidak berhenti bila sesekali error.
+
+**Transkrip live**
+- Bug: jeda hening pertama membuat transkrip live permanen memakai pengenal online (lebih lambat). Diperbaiki.
+- Sesi pengenal suara diganti pada jeda bicara (setelah 40 detik, paling lambat 55 detik), tidak lagi tepat di
+  detik ke-50 di tengah kalimat; kata yang sedang dikenali tidak hilang dan tidak tercatat dua kali saat ganti.
+
+**MoM**
+- Bagian baru **Risiko & Blocker**.
+- Action item lebih rapi: diawali kata kerja, satu tugas per item, tugas duplikat digabung.
+- Instruksi agar keputusan/penugasan di bagian akhir rapat panjang tidak terlewat.
+- Bila Claude gagal (jaringan, batas pemakaian), dicoba sekali lagi otomatis. Bila tetap gagal, kartu
+  menampilkan alasannya dengan tombol **Susun ulang** yang langsung menyusun MoM dari transkrip yang tersimpan
+  (`transkrip_final.json`), tanpa mentranskripsi ulang.
+- Tabel MoM tidak lagi rusak bila teks berisi `|` atau baris baru.
+
+**Keandalan rapat panjang**
+- Menutup aplikasi saat merekam kini menutup file rekaman dengan rapi.
+- Rekaman yang tidak sempat ditutup (aplikasi tertutup paksa, Mac mati) tetap bisa diproses: header WAV yang
+  rusak tidak lagi membuat rekaman terbaca kosong.
+- Mic yang berhenti diam-diam (mis. setelah Mac tidur) dipasang ulang otomatis dalam ±4 detik.
+- Timer dan waktu **Penting** memakai jam audio (selalu cocok dengan rekaman) dan tetap berjalan saat menu bar
+  dibuka.
+- Tombol batal saat memproses; disk penuh dilaporkan saat merekam.
+- Proses akhir membaca audio per potongan langsung dari file: memori puncak rapat 70 menit turun dari ±770 MB
+  ke ±230 MB (diuji dengan simulasi rapat 70 menit; sisa audio yang ditranskripsi setelah rapat selesai ±85
+  detik).
+
 ## 2.3.4
 
 - **Transkrip live lebih real time dan tidak terpotong.**

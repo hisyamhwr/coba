@@ -13,6 +13,8 @@ struct NotesResult: Decodable, Equatable {
     let decisions: Int
     let action_items: Int
     let note: String?
+    /// false bila MoM gagal disusun (transkrip tetap tersimpan). Opsional agar cocok dengan versi Python lama.
+    let summarized: Bool?
 }
 
 /// Status pulau yang jarang berubah (fase, ukuran, hasil). Hanya diubah dari main actor.
@@ -52,7 +54,7 @@ final class AppState: ObservableObject {
             // Peringatan (mis. izin audio meeting) menambah satu baris.
             return expanded ? CGSize(width: 460, height: warning == nil ? 180 : 204) : CGSize(width: 240, height: 32)
         case .processing: return CGSize(width: 360, height: 70)
-        case .done: return CGSize(width: 460, height: 130)
+        case .done: return CGSize(width: 460, height: result?.summarized == false ? 142 : 130)
         case .failed: return CGSize(width: 440, height: 150)
         }
     }

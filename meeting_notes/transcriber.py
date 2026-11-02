@@ -28,6 +28,13 @@ ACCURATE_MODEL = "large-v3"
 ACCURATE_MIN_RAM_GB = 16
 # Jeda hening yang lebih panjang dari ini dipangkas sebelum ditranskripsi.
 MAX_PAUSE_SECONDS = 1.5
+# Whisper bekerja per jendela 30 detik, dan dengan condition_on_previous_text=False (perlu untuk mencegah
+# pengulangan di rapat panjang) prompt awal hanya dipakai untuk jendela PERTAMA setiap pemanggilan. Karena itu
+# audio dipotong sendiri per <= 28 detik di titik paling sunyi, dan setiap jendela diberi prompt lengkap: kamus,
+# contoh kalimat, dan akhir kalimat jendela sebelumnya agar konteksnya bersambung.
+WINDOW_SECONDS = 28
+WINDOW_SEARCH_SECONDS = 6
+CONTEXT_CHARS = 120
 # Label jalur rekaman terpisah dari aplikasi Mac.
 MIC_LABEL = "Saya (mic)"
 SYSTEM_LABEL = "Peserta online"
@@ -275,6 +282,29 @@ def chunk_bounds(audio: np.ndarray, sr: int = SAMPLE_RATE, chunk_seconds: int = 
     return list(zip(starts, starts[1:] + [n], strict=True))
 
 
+def iter_chunks(reader, start: int = 0, chunk_seconds: int = CHUNK_SECONDS, include_last: bool = True):
+    """Potongan +-chunk_seconds dari file WAV (wavio.GrowingWav), dipotong di titik paling sunyi.
+
+    Membaca langsung dari file satu potongan per kali, sehingga rapat berjam-jam tidak dimuat utuh ke memori.
+    include_last=False: potongan terakhir (yang mungkin belum lengkap karena rapat masih berjalan) dilewati.
+    Menghasilkan (sampel awal, audio).
+    """
+    chunk = chunk_seconds * SAMPLE_RATE
+    pos = start
+    while True:
+        total = reader.samples()
+        if pos >= total:
+            return
+        piece = reader.read(pos, min(total, pos + chunk + SAMPLE_RATE))
+        bounds = chunk_bounds(piece, chunk_seconds=chunk_seconds)
+        last = len(bounds) == 1
+        if last and not include_last:
+            return
+        cut = bounds[0][1]
+        yield pos, piece[:cut]
+        pos += cut
+
+
 def load_audio(path: Path) -> np.ndarray:
     """Baca file audio apa pun (wav, mp3, m4a, ...) menjadi mono 16 kHz."""
     from faster_whisper import decode_audio
@@ -360,23 +390,51 @@ class Transcriber:
         """Unduh model (sekali saja) tanpa memuatnya ke memori."""
         self.engine.download()
 
-    def prompt(self) -> str:
-        if not self.vocabulary:
-            return BASE_PROMPT
-        # Whisper hanya memakai +-223 token terakhir dari prompt. Istilah terpenting (urutan pertama di kamus)
-        # ditaruh paling dekat ke akhir, sehingga bila prompt kepanjangan yang terpotong istilah yang kurang penting.
-        terms = ", ".join(reversed(self.vocabulary.split(", ")))
-        return f"Istilah: {terms}. {BASE_PROMPT}"
+    def prompt(self, context: str = "") -> str:
+        # Whisper hanya memakai +-223 token terakhir dari prompt. Urutan dari depan: istilah (terpenting paling
+        # belakang), contoh kalimat, lalu konteks jendela sebelumnya; bila kepanjangan, yang terpotong istilah
+        # yang paling kurang penting.
+        parts = []
+        if self.vocabulary:
+            parts.append(f"Istilah: {', '.join(reversed(self.vocabulary.split(', ')))}.")
+        parts.append(BASE_PROMPT)
+        if context:
+            parts.append(context)
+        return " ".join(parts)
 
     def transcribe_chunk(self, chunk: np.ndarray, offset: float = 0.0) -> list[Segment]:
         """Transkripsi satu potongan (tanpa membersihkan); waktu dihitung dari awal rekaman."""
         condensed = Condensed(chunk)
         if condensed.seconds < 0.5:
             return []
-        return [
-            Segment(condensed.original_time(s.start) + offset, condensed.original_time(s.end) + offset, s.text)
-            for s in self.engine.transcribe(normalize_loudness(condensed.audio), self.prompt())
-        ]
+        audio = normalize_loudness(condensed.audio)
+        segments: list[Segment] = []
+        context = ""
+        for start, end in chunk_bounds(audio, chunk_seconds=WINDOW_SECONDS, search_seconds=WINDOW_SEARCH_SECONDS):
+            base = start / SAMPLE_RATE
+            window = self.engine.transcribe(audio[start:end], self.prompt(context))
+            for s in window:
+                segments.append(Segment(condensed.original_time(base + s.start) + offset,
+                                        condensed.original_time(base + s.end) + offset, s.text))
+            text = " ".join(s.text for s in window).strip()
+            # Konteks hanya dari teks yang wajar: teks yang mengulang-ulang (tanda Whisper "macet") tidak
+            # diteruskan agar kesalahan tidak menular ke jendela berikutnya.
+            if text and collapse_repeats(text) == text:
+                context = text[-CONTEXT_CHARS:].split(" ", 1)[-1] if len(text) > CONTEXT_CHARS else text
+            else:
+                context = ""
+        return segments
+
+    def transcribe_wav(self, reader, start: int = 0,
+                       on_progress: Callable[[float], None] | None = None) -> list[Segment]:
+        """Seperti transcribe, tetapi langsung dari file WAV per potongan (hemat memori)."""
+        total = max(1, reader.samples() - start)
+        segments: list[Segment] = []
+        for pos, chunk in iter_chunks(reader, start, self.chunk_seconds):
+            segments += self.transcribe_chunk(chunk, pos / SAMPLE_RATE)
+            if on_progress:
+                on_progress(min(1.0, (pos + len(chunk) - start) / total))
+        return clean_segments(segments)
 
     def transcribe(self, audio: np.ndarray, on_progress: Callable[[float], None] | None = None,
                    offset: float = 0.0) -> list[Segment]:

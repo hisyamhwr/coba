@@ -19,7 +19,4 @@ enum Config {
     static var outputDir: URL {
         FileManager.default.homeDirectoryForCurrentUser.appendingPathComponent("MeetingNotes")
     }
-
-    /// Transkrip live diputar ulang tiap 50 detik karena pengenalan suara Apple dibatasi +-1 menit per sesi.
-    static let liveRotateSeconds = 50
 }

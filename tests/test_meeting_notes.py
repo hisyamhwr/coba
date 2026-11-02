@@ -52,6 +52,7 @@ SUMMARY = MeetingSummary(
     action_items=[ActionItem(task="Follow up ke vendor", owner="Budi", deadline="Jumat")],
     open_questions=[],
     highlights=[],
+    risks=["Vendor bisa terlambat lagi bila kontrak belum diteken"],
 )
 INFO = MeetingInfo(started_at=datetime(2026, 10, 27, 9, 30), duration_seconds=3725)
 
@@ -461,6 +462,9 @@ class TrackTranscriber:
             return [Segment(1, 3, "Deploy ke staging hari ini ya")]
         return [Segment(4, 6, "Siap, saya cek flagging-nya")]
 
+    def transcribe_wav(self, reader, start=0, on_progress=None):
+        return self.transcribe(reader.read(start), on_progress, offset=start / 16000)
+
 
 def test_pipeline_transcribes_mic_and_meeting_tracks_separately(tmp_path, monkeypatch):
     _no_api_key(monkeypatch)
@@ -554,13 +558,16 @@ class ChunkTranscriber:
             on_progress(1.0)
         return segments
 
+    def transcribe_wav(self, reader, start=0, on_progress=None):
+        return self.transcribe(reader.read(start), on_progress, offset=start / 16000)
+
 
 def _speech(seconds):
     return (np.sin(np.arange(int(16000 * seconds)) / 5) * 0.1).astype("float32")
 
 
 def test_growing_wav_reads_file_still_being_written(tmp_path):
-    from meeting_notes.incremental import GrowingWav
+    from meeting_notes.wavio import GrowingWav
 
     path = tmp_path / "mic.wav"
     sf.write(path, _speech(3), 16000, subtype="PCM_16")
@@ -600,3 +607,136 @@ def test_background_transcription_then_process_only_transcribes_the_rest(tmp_pat
     assert all(seconds < 3 * 60 for _, seconds in final.chunks)
     md = result.markdown_path.read_text(encoding="utf-8")
     assert "potongan di 0" in md and f"potongan di {saved['sistem']['until']:.0f}" in md
+
+
+def test_markdown_escapes_table_cells_and_lists_risks(tmp_path):
+    summary = SUMMARY.model_copy(update={
+        "action_items": [ActionItem(task="Cek flag A | B\ndi staging", owner="Budi", deadline="-")],
+    })
+    md = render_markdown(INFO, SEGMENTS, summary, corrections={("ef e | x", "FE"): 1})
+    assert "| 1 | Cek flag A \\| B di staging | Budi | - |" in md
+    assert "| ef e \\| x | FE | 1 |" in md
+    assert "## Risiko & Blocker" in md and "Vendor bisa terlambat lagi" in md
+    doc = Document(write_docx(tmp_path / "a.docx", INFO, SEGMENTS, summary))
+    assert any(p.text == "Risiko & Blocker" for p in doc.paragraphs)
+
+
+def _mac_recording(folder, seconds=3):
+    for name in ("meeting.wav", "sistem.wav", "mic.wav"):
+        sf.write(folder / name, _speech(seconds), 16000, subtype="PCM_16")
+
+
+def _break_header(path):
+    """Seperti rekaman yang tidak sempat ditutup rapi: ukuran di header WAV = 0."""
+    with path.open("r+b") as f:
+        f.seek(4)
+        f.write(b"\0\0\0\0")
+        f.seek(40)
+        f.write(b"\0\0\0\0")
+
+
+def test_unfinalized_recording_is_still_processed(tmp_path, monkeypatch):
+    _no_api_key(monkeypatch)
+    monkeypatch.setattr(summarizer_module, "find_claude_cli", lambda: None)
+    _mac_recording(tmp_path, seconds=4)
+    for name in ("meeting.wav", "sistem.wav", "mic.wav"):
+        _break_header(tmp_path / name)
+    final = ChunkTranscriber()
+    result = process_recording(tmp_path / "meeting.wav", Settings(output_dir=tmp_path / "out"),
+                               INFO.started_at, lambda _: None, final)
+    md = result.markdown_path.read_text(encoding="utf-8")
+    assert "**Durasi:** 00:04" in md
+    assert [round(seconds) for _, seconds in final.chunks] == [4, 4]
+
+
+def test_retry_reuses_transcript_and_retries_claude_once(tmp_path, monkeypatch):
+    from meeting_notes import pipeline
+
+    monkeypatch.setattr(pipeline, "SUMMARY_RETRY_DELAY", 0)
+    _mac_recording(tmp_path)
+    calls = {"n": 0}
+
+    class Flaky:
+        def summarize(self, transcript, glossary=(), marks=()):
+            calls["n"] += 1
+            raise RuntimeError("usage limit reached")
+
+    monkeypatch.setattr(pipeline, "make_summarizer", lambda settings: (Flaky(), None))
+    settings = Settings(output_dir=tmp_path / "out")
+    first = process_recording(tmp_path / "meeting.wav", settings, INFO.started_at, lambda _: None, ChunkTranscriber())
+    assert calls["n"] == 2 and not first.summarized
+    assert "usage limit reached" in first.note and "Susun ulang" in first.note
+    assert (tmp_path / "transkrip_final.json").exists()
+
+    class Works:
+        def summarize(self, transcript, glossary=(), marks=()):
+            assert "potongan di 0" in transcript
+            return SUMMARY
+
+    monkeypatch.setattr(pipeline, "make_summarizer", lambda settings: (Works(), None))
+    untouched = ChunkTranscriber()
+    second = process_recording(tmp_path / "meeting.wav", settings, INFO.started_at, lambda _: None, untouched)
+    assert second.summarized and second.title == "Sinkronisasi Vendor"
+    assert untouched.chunks == []  # tidak mentranskripsi ulang
+
+
+def test_wav_reader_handles_extra_chunks_and_rejects_other_formats(tmp_path):
+    import struct
+
+    from meeting_notes.wavio import GrowingWav, is_pcm_wav
+
+    samples = (np.arange(1600) % 100 - 50).astype("<i2")
+    fmt = struct.pack("<HHIIHH", 1, 1, 16000, 32000, 2, 16)
+    body = b"JUNK" + struct.pack("<I", 28) + b"\0" * 28 + b"fmt " + struct.pack("<I", 16) + fmt
+    body += b"FLLR" + struct.pack("<I", 6) + b"\0" * 6 + b"data" + struct.pack("<I", 0) + samples.tobytes()
+    path = tmp_path / "apple.wav"
+    path.write_bytes(b"RIFF" + struct.pack("<I", 0) + b"WAVE" + body)
+    assert is_pcm_wav(path)
+    np.testing.assert_allclose(GrowingWav(path).read(), samples / 32768, atol=1e-6)
+    stereo = tmp_path / "stereo.wav"
+    sf.write(stereo, np.zeros((1600, 2), dtype="float32"), 44100)
+    assert not is_pcm_wav(stereo)
+    assert not is_pcm_wav(tmp_path / "tidak-ada.wav")
+
+
+class PromptRecorder:
+    def __init__(self):
+        self.calls = []
+
+    def transcribe(self, audio, prompt):
+        self.calls.append((len(audio) / 16000, prompt))
+        n = len(self.calls)
+        return [Segment(1.0, 2.0, f"kalimat ke {n} soal flagging")]
+
+
+def test_every_whisper_window_gets_glossary_and_previous_context():
+    transcriber = Transcriber(engine="faster-whisper")
+    transcriber.engine = PromptRecorder()
+    transcriber.vocabulary = "FE, flagging"
+    # 70 detik ucapan dengan jeda pendek tiap 5 detik (tidak dipangkas karena < 1,5 detik).
+    audio = np.concatenate([np.concatenate([_speech(4.5), np.zeros(8000, dtype="float32")]) for _ in range(14)])
+    segments = transcriber.transcribe_chunk(audio, offset=100.0)
+    calls = transcriber.engine.calls
+    assert len(calls) == 3 and all(seconds <= 28.01 for seconds, _ in calls)
+    assert all(prompt.startswith("Istilah: flagging, FE.") for _, prompt in calls)
+    assert calls[1][1].endswith("kalimat ke 1 soal flagging")
+    assert calls[2][1].endswith("kalimat ke 2 soal flagging")
+    # Waktu tiap jendela dipetakan kembali ke rekaman asli (offset + posisi jendela).
+    starts = [round(s.start) for s in segments]
+    assert starts[0] == 101 and 120 < starts[1] < 135 and starts[2] > starts[1] + 20
+
+
+def test_transcribe_wav_streams_chunks_and_matches_offsets(tmp_path):
+    from meeting_notes.wavio import GrowingWav
+
+    path = tmp_path / "mic.wav"
+    sf.write(path, _speech(25), 16000, subtype="PCM_16")
+    transcriber = Transcriber(engine="faster-whisper", chunk_seconds=10)
+    recorder = PromptRecorder()
+    transcriber.engine = recorder
+    progress = []
+    segments = transcriber.transcribe_wav(GrowingWav(path), start=16000 * 3, on_progress=progress.append)
+    # 22 detik sisa -> 3 potongan (+-10 detik), tiap potongan dibaca terpisah dari file.
+    assert len(recorder.calls) == 3
+    assert segments[0].start == pytest.approx(4.0, abs=0.05)
+    assert progress[-1] == 1.0

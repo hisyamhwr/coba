@@ -18,6 +18,13 @@ final class Processor {
     private var stdoutBuffer = Data()
     private var stderrTail = ""
     private var result: NotesResult?
+    private var cancelled = false
+
+    /// Hentikan pemrosesan (tombol batal di pulau).
+    func cancel() {
+        cancelled = true
+        if process.isRunning { process.terminate() }
+    }
 
     /// Environment untuk Python, seperti setelah `conda activate`.
     static func pythonEnvironment() -> [String: String] {
@@ -92,6 +99,8 @@ final class Processor {
             }
             if let result = self.result, proc.terminationStatus == 0 {
                 onFinish(.success(result))
+            } else if self.cancelled {
+                onFinish(.failure(ProcessorError.failed("Pemrosesan dibatalkan. Rekaman aman; klik Proses ulang.")))
             } else {
                 // Simpan log lengkap di folder rekaman; tampilkan inti error (baris terakhir traceback).
                 let log = audio.deletingLastPathComponent().appendingPathComponent("proses.log")

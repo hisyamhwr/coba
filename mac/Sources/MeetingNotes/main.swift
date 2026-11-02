@@ -50,6 +50,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         UNUserNotificationCenter.current().requestAuthorization(options: [.alert, .sound]) { _, _ in }
     }
 
+    func applicationWillTerminate(_ notification: Notification) {
+        controller?.shutdown()
+    }
+
     private func updateMousePassthrough() {
         guard let panel, let controller else { return }
         panel.updateMousePassthrough(islandSize: controller.state.islandSize)

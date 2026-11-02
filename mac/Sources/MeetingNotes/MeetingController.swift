@@ -12,6 +12,9 @@ final class MeetingController {
     private var worker: LiveWorker?
     private var timer: Timer?
     private var startedAt = Date()
+    /// Pengawas: kapan jam audio terakhir bergerak (untuk memulihkan mic yang berhenti diam-diam).
+    private var lastAudioProgress = Date()
+    private var lastRecordedSeconds: TimeInterval = 0
 
     init() {
         state = AppState()
@@ -78,7 +81,10 @@ final class MeetingController {
             self.state.starting = false
             self.capture = capture
             self.live = live
-            self.startedAt = started
+            // Waktu mulai = saat mic benar-benar merekam (bukan saat klik; dialog izin bisa makan waktu).
+            self.startedAt = Date()
+            self.lastAudioProgress = Date()
+            self.lastRecordedSeconds = 0
             self.state.recordingDir = dir
             self.state.micName = capture.micName
             self.state.warning = nil
@@ -94,9 +100,12 @@ final class MeetingController {
             let worker = LiveWorker(folder: dir)
             worker.start()
             self.worker = worker
-            self.timer = Timer.scheduledTimer(withTimeInterval: 1, repeats: true) { [weak self] _ in
+            let timer = Timer(timeInterval: 0.5, repeats: true) { [weak self] _ in
                 Task { @MainActor in self?.tick() }
             }
+            // Mode .common: timer tetap berjalan saat menu bar sedang dibuka.
+            RunLoop.main.add(timer, forMode: .common)
+            self.timer = timer
             // Audio sistem menyusul tanpa menahan rekaman mic (izinnya bisa membuka dialog macOS).
             Task { @MainActor in
                 try? await Task.sleep(nanoseconds: 4_000_000_000)
@@ -130,8 +139,9 @@ final class MeetingController {
     }
 
     func markImportant() {
-        guard state.phase == .recording else { return }
-        state.marks.append(meter.elapsed)
+        guard state.phase == .recording, let capture else { return }
+        // Jam audio: tetap cocok dengan rekaman walau Mac sempat tidur atau mic sempat terputus.
+        state.marks.append(capture.recordedSeconds)
     }
 
     func stop() {
@@ -153,12 +163,33 @@ final class MeetingController {
         runProcessor(dir: dir)
     }
 
-    /// Proses ulang rekaman terakhir setelah gagal (mis. setelah memperbaiki environment Python).
+    /// Proses ulang rekaman terakhir: setelah gagal, atau saat MoM gagal disusun (mis. batas pemakaian Claude).
+    /// Transkrip yang sudah jadi dipakai ulang, jadi langsung ke penyusunan MoM.
     func retry() {
-        guard state.phase == .failed, let dir = state.recordingDir,
+        let canRetry = state.phase == .failed || (state.phase == .done && state.result?.summarized == false)
+        guard canRetry, let dir = state.recordingDir,
               FileManager.default.fileExists(atPath: dir.appendingPathComponent("meeting.wav").path)
         else { return }
         runProcessor(dir: dir)
+    }
+
+    /// Batalkan pemrosesan yang terlalu lama; rekaman tetap aman dan bisa diproses ulang.
+    func cancelProcessing() {
+        guard state.phase == .processing, let processor else { return }
+        processor.cancel()
+    }
+
+    /// Dipanggil saat aplikasi ditutup: rekaman yang sedang berjalan ditutup rapi agar file WAV utuh, dan
+    /// transkripsi latar belakang dihentikan. Pemrosesan yang sedang berjalan dibiarkan selesai sendiri.
+    func shutdown() {
+        guard state.phase == .recording, let capture, let dir = state.recordingDir else { return }
+        timer?.invalidate()
+        live?.stop()
+        capture.note("Aplikasi ditutup saat merekam; rekaman disimpan")
+        capture.stop()
+        worker?.stop()
+        let marks = (try? JSONEncoder().encode(state.marks)) ?? Data("[]".utf8)
+        try? marks.write(to: dir.appendingPathComponent("penting.json"))
     }
 
     private func runProcessor(dir: URL) {
@@ -210,9 +241,18 @@ final class MeetingController {
     // MARK: - Internal
 
     private func tick() {
-        meter.elapsed = Date().timeIntervalSince(startedAt)
-        if Int(meter.elapsed) > 0, Int(meter.elapsed) % Config.liveRotateSeconds == 0 {
-            live?.rotate()
+        // Durasi terekam (jam audio). Pergantian sesi transkrip live diatur LiveTranscriber sendiri.
+        guard let capture else { return }
+        let recorded = capture.recordedSeconds
+        let seconds = recorded.rounded(.down)
+        if meter.elapsed != seconds { meter.elapsed = seconds }
+        if recorded > lastRecordedSeconds {
+            lastRecordedSeconds = recorded
+            lastAudioProgress = Date()
+        } else if Date().timeIntervalSince(lastAudioProgress) > 4 {
+            // Mic diam total 4 detik (biasanya setelah Mac bangun dari tidur): pasang ulang.
+            lastAudioProgress = Date()
+            capture.recoverIfStalled()
         }
     }
 
@@ -234,7 +274,11 @@ final class MeetingController {
             state.result = result
             state.step = 2
             state.phase = .done
-            notify(title: "MoM siap", body: result.title)
+            if result.summarized == false {
+                notify(title: "MoM belum tersusun", body: "Transkrip tersimpan. Klik Susun ulang untuk mencoba lagi.")
+            } else {
+                notify(title: "MoM siap", body: result.title)
+            }
         case .failure(let error):
             fail(error.localizedDescription, dir: dir)
             notify(title: "Gagal memproses rapat", body: "Rekaman aman, bisa diproses ulang.")
