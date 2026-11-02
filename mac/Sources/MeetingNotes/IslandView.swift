@@ -13,6 +13,11 @@ private enum Palette {
     static let blue = Color(red: 0.04, green: 0.52, blue: 1.0)     // #0A84FF Word, tugas
     static let pink = Color(red: 1.0, green: 0.22, blue: 0.56)     // #FF375F
     static let chip = Color.white.opacity(0.1)
+    /// Garis tepi "kaca": terang di atas, memudar ke bawah. Memberi kesan timbul pada tombol & kartu (statis).
+    static let rim = LinearGradient(colors: [Color.white.opacity(0.24), Color.white.opacity(0.04)],
+                                    startPoint: .top, endPoint: .bottom)
+    /// Latar kartu di dalam pulau (mis. kartu transkrip live).
+    static let card = Color.white.opacity(0.055)
     static let secondary = Color.white.opacity(0.72)               // teks transkrip yang sudah final
     static let muted = Color.white.opacity(0.55)                   // ±6:1 di atas hitam
 
@@ -220,37 +225,81 @@ struct IslandView: View {
     }
 
     private var idleExpanded: some View {
-        VStack(spacing: 12) {
-            Button {
-                haptic()
-                controller.start()
-            } label: {
-                HStack(spacing: 10) {
-                    if state.starting {
-                        ProgressView().controlSize(.small).tint(.white)
-                    } else {
-                        RecordGlyph()
-                    }
-                    Text(state.starting ? "Menyiapkan…" : "Mulai catat")
+        VStack(alignment: .leading, spacing: 14) {
+            HStack(spacing: 12) {
+                BrandMark(size: 34, active: hovering)
+                    .entrance(0.02)
+                VStack(alignment: .leading, spacing: 2) {
+                    Text(Self.greeting())
                         .font(Typo.title)
+                    Text(Self.dayFormatter.string(from: Date()))
+                        .font(Typo.small)
+                        .foregroundStyle(Palette.muted)
                 }
-                .frame(maxWidth: .infinity)
-                .frame(height: 46)
-                .background(Capsule().fill(Palette.brand))
-                .overlay(Capsule().strokeBorder(Color.white.opacity(0.3), lineWidth: 1))
-                .foregroundStyle(.black.opacity(0.85))
+                .entrance(0.06)
+                Spacer(minLength: 8)
+                startButton
+                    .entrance(0.1)
             }
-            .buttonStyle(PressableStyle())
-            .hoverLift()
-            .disabled(state.starting)
-            HStack(spacing: 8) {
-                toggleChip("Word", icon: "doc.richtext", isOn: $state.exportDocx)
+            HStack(spacing: 6) {
+                toggleChip("Word", icon: "doc.richtext", isOn: $state.exportDocx, help: "Buat juga file Word (.docx)")
+                toggleChip("Live", icon: "captions.bubble", isOn: $state.liveTranscript,
+                           help: "Transkrip live selama rapat")
                 Spacer()
                 iconButton("folder", help: "Buka folder notulen") { controller.openFolder() }
                 iconButton("xmark", help: "Tutup", action: collapse)
             }
+            .entrance(0.14)
         }
     }
+
+    /// Tombol Mulai: kapsul ringkas bergradien merah dengan riak lembut di belakangnya dan kilau sekali lewat.
+    private var startButton: some View {
+        Button {
+            haptic()
+            controller.start()
+        } label: {
+            HStack(spacing: 7) {
+                if state.starting {
+                    ProgressView().controlSize(.mini).tint(.white)
+                } else {
+                    RecordGlyph()
+                }
+                Text(state.starting ? "Menyiapkan" : "Mulai")
+                    .font(Typo.label.weight(.semibold))
+            }
+            .padding(.leading, 10)
+            .padding(.trailing, 14)
+            .frame(height: 32)
+            .background(Capsule().fill(Palette.record))
+            .overlay(Sheen().clipShape(Capsule()))
+            .overlay(Capsule().strokeBorder(Palette.rim, lineWidth: 1))
+            .background(PulseHalo())
+            .foregroundStyle(.white)
+        }
+        .buttonStyle(PressableStyle())
+        .hoverLift()
+        .disabled(state.starting)
+        .help("Mulai merekam & mencatat rapat")
+        .accessibilityLabel("Mulai catat rapat")
+    }
+
+    private static func greeting(_ date: Date = Date()) -> String {
+        let hour = Calendar.current.component(.hour, from: date)
+        switch hour {
+        case 4..<11: return "Selamat pagi"
+        case 11..<15: return "Selamat siang"
+        case 15..<18: return "Selamat sore"
+        default: return "Selamat malam"
+        }
+    }
+
+    private static let dayFormatter: DateFormatter = {
+        let formatter = DateFormatter()
+        formatter.locale = Locale(identifier: "id_ID")
+        formatter.dateFormat = "EEEE, d MMMM"
+        return formatter
+    }()
 
     // MARK: Merekam
 
@@ -280,7 +329,7 @@ struct IslandView: View {
         VStack(alignment: .leading, spacing: 10) {
             HStack(spacing: 8) {
                 RecordingDot()
-                ElapsedText(clock: meter.clock, size: 15)
+                ElapsedText(clock: meter.clock, size: 17)
                 Spacer()
                 // Dua jalur yang direkam, masing-masing menyala saat ada suara: langsung terlihat bila suara
                 // meeting atau mic tidak masuk.
@@ -289,6 +338,9 @@ struct IslandView: View {
                 iconButton("chevron.up", help: "Perkecil", action: collapse)
             }
             LiveText(caption: meter.caption)
+                .padding(.horizontal, 12)
+                .padding(.vertical, 9)
+                .background(CaptionCard())
             if let warning = state.warning {
                 Label(warning, systemImage: "exclamationmark.triangle.fill")
                     .font(.system(size: 10, weight: .regular))
@@ -319,6 +371,7 @@ struct IslandView: View {
                     .padding(.horizontal, 12)
                     .frame(height: 30)
                     .background(Capsule().fill(Palette.chip))
+                    .overlay(Capsule().strokeBorder(Palette.rim, lineWidth: 0.75))
                 }
                 .buttonStyle(PressableStyle())
                 .hoverLift()
@@ -329,13 +382,13 @@ struct IslandView: View {
                     controller.stop()
                 } label: {
                     Image(systemName: "stop.fill")
-                        .font(.system(size: 13, weight: .semibold))
-                        .frame(width: 38, height: 38)
+                        .font(.system(size: 12, weight: .semibold))
+                        .frame(width: 34, height: 34)
                         .background(Circle().fill(Palette.record))
-                        .overlay(Circle().strokeBorder(Color.white.opacity(0.25), lineWidth: 1))
-                        .background(Circle().fill(RadialGradient(colors: [Palette.red.opacity(0.5), .clear],
-                                                                 center: .center, startRadius: 14, endRadius: 30))
-                            .frame(width: 60, height: 60))
+                        .overlay(Circle().strokeBorder(Palette.rim, lineWidth: 1))
+                        .background(Circle().fill(RadialGradient(colors: [Palette.red.opacity(0.45), .clear],
+                                                                 center: .center, startRadius: 12, endRadius: 26))
+                            .frame(width: 52, height: 52))
                 }
                 .buttonStyle(PressableStyle())
                 .hoverLift()
@@ -501,6 +554,7 @@ struct IslandView: View {
                 .contentTransition(.symbolEffect(.replace))
                 .frame(width: 28, height: 28)
                 .background(Circle().fill(Palette.chip))
+                .overlay(Circle().strokeBorder(Palette.rim, lineWidth: 0.75))
         }
         .buttonStyle(PressableStyle())
         .hoverLift()
@@ -508,23 +562,25 @@ struct IslandView: View {
         .accessibilityLabel(help)
     }
 
-    private func toggleChip(_ title: String, icon: String, isOn: Binding<Bool>) -> some View {
-        Button {
+    private func toggleChip(_ title: String, icon: String, isOn: Binding<Bool>, help: String) -> some View {
+        let on = isOn.wrappedValue
+        return Button {
             withAnimation(Liquid.pop) { isOn.wrappedValue.toggle() }
         } label: {
-            Label(title, systemImage: isOn.wrappedValue ? "checkmark.circle.fill" : icon)
+            Label(title, systemImage: on ? "checkmark.circle.fill" : icon)
                 .font(Typo.small)
-                .foregroundStyle(isOn.wrappedValue ? Palette.blue : Palette.muted)
+                .foregroundStyle(on ? Palette.yellow : Palette.muted)
                 .contentTransition(.symbolEffect(.replace))
                 .padding(.horizontal, 10)
                 .frame(height: 28)
-                .background(Capsule().fill(isOn.wrappedValue ? Palette.blue.opacity(0.2) : Palette.chip))
+                .background(Capsule().fill(on ? Palette.yellow.opacity(0.16) : Palette.chip))
+                .overlay(Capsule().strokeBorder(Palette.rim, lineWidth: 0.75))
         }
         .buttonStyle(PressableStyle())
         .hoverLift()
-        .help("Buat juga file Word (.docx)")
-        .accessibilityLabel("Buat juga file Word")
-        .accessibilityValue(isOn.wrappedValue ? "aktif" : "nonaktif")
+        .help(help)
+        .accessibilityLabel(help)
+        .accessibilityValue(on ? "aktif" : "nonaktif")
     }
 
     private func stat(_ value: Int, _ label: String?, icon: String, color: Color) -> some View {
@@ -539,6 +595,7 @@ struct IslandView: View {
         .padding(.horizontal, 8)
         .frame(height: 24)
         .background(Capsule().fill(Palette.chip))
+        .overlay(Capsule().strokeBorder(Palette.rim, lineWidth: 0.75))
     }
 }
 
@@ -626,14 +683,62 @@ private struct BrandMark: View {
     }
 }
 
-/// Ikon rekam di tombol Mulai: lingkaran dengan inti, seperti tombol rekam kamera.
+/// Ikon rekam di tombol Mulai: cincin putih dengan inti, seperti tombol rana kamera.
 private struct RecordGlyph: View {
     var body: some View {
         ZStack {
-            Circle().strokeBorder(Color.black.opacity(0.8), lineWidth: 2.5)
-            Circle().fill(Palette.red).padding(5)
+            Circle().strokeBorder(Color.white, lineWidth: 1.5)
+            Circle().fill(Color.white).padding(3.5)
         }
-        .frame(width: 22, height: 22)
+        .frame(width: 14, height: 14)
+        .accessibilityHidden(true)
+    }
+}
+
+/// Kartu kaca tempat transkrip live: latar sangat tipis dengan tepi terang di atas.
+private struct CaptionCard: View {
+    var body: some View {
+        let shape = RoundedRectangle(cornerRadius: 16, style: .continuous)
+        shape
+            .fill(Palette.card)
+            .overlay(shape.strokeBorder(Palette.rim, lineWidth: 0.75))
+    }
+}
+
+/// Riak lembut yang terus memancar dari belakang tombol Mulai (hanya selama panel Siap terbuka).
+/// Yang beranimasi hanya skala dan opacity.
+private struct PulseHalo: View {
+    @State private var on = false
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
+
+    var body: some View {
+        Capsule()
+            .fill(Palette.red.opacity(0.5))
+            .scaleEffect(x: on ? 1.22 : 1, y: on ? 1.5 : 1)
+            .opacity(on ? 0 : 0.7)
+            .allowsHitTesting(false)
+            .onAppear {
+                guard !reduceMotion else { return }
+                withAnimation(.easeOut(duration: 1.8).repeatForever(autoreverses: false)) { on = true }
+            }
+    }
+}
+
+/// Kilau putih yang menyapu tombol sekali saat muncul.
+private struct Sheen: View {
+    @State private var swept = false
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
+
+    var body: some View {
+        LinearGradient(colors: [.clear, Color.white.opacity(0.5), .clear], startPoint: .leading, endPoint: .trailing)
+            .frame(width: 34)
+            .rotationEffect(.degrees(18))
+            .offset(x: swept ? 90 : -90)
+            .allowsHitTesting(false)
+            .onAppear {
+                guard !reduceMotion else { return }
+                withAnimation(.easeInOut(duration: 0.9).delay(0.45)) { swept = true }
+            }
     }
 }
 
@@ -1035,6 +1140,28 @@ private struct HoverLift: ViewModifier {
     }
 }
 
+/// Elemen muncul bertahap (sedikit naik + memudar masuk) dengan jeda berbeda, sehingga isi pulau terasa
+/// "tersusun" alih-alih muncul sekaligus. Sekali jalan setiap isi pulau berganti.
+private struct Entrance: ViewModifier {
+    let delay: Double
+    @State private var shown = false
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
+
+    func body(content: Content) -> some View {
+        content
+            .opacity(shown ? 1 : 0)
+            .offset(y: shown ? 0 : 6)
+            .onAppear {
+                if reduceMotion {
+                    shown = true
+                } else {
+                    withAnimation(.spring(duration: 0.45, bounce: 0.25).delay(delay)) { shown = true }
+                }
+            }
+    }
+}
+
 private extension View {
     func hoverLift() -> some View { modifier(HoverLift()) }
+    func entrance(_ delay: Double) -> some View { modifier(Entrance(delay: delay)) }
 }

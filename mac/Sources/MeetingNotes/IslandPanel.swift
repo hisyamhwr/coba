@@ -7,7 +7,7 @@ import SwiftUI
 /// meneruskan klik ke aplikasi di bawahnya (lihat `updateMousePassthrough`).
 final class IslandPanel: NSPanel {
     /// Cukup untuk ukuran pulau terbesar (plus "bahu" kiri-kanan, jarak pill dari notch, dan pantulan pegas).
-    static let canvas = CGSize(width: 540, height: 270)
+    static let canvas = CGSize(width: 540, height: 290)
 
     override var canBecomeKey: Bool { true }
 

@@ -2,6 +2,18 @@
 
 Format versi: `MAYOR.FITUR.PERBAIKAN` (lihat [docs/ROADMAP.md](docs/ROADMAP.md)).
 
+## 3.3.0
+
+Tampilan baru yang lebih ringkas, segar, dan tidak monoton:
+- **Panel Siap** didesain ulang: logo, sapaan sesuai waktu ("Selamat siang") dan tanggal, lalu tombol
+  **Mulai** berbentuk kapsul ringkas (sebelumnya tombol besar selebar pulau). Tombolnya punya riak lembut yang
+  memancar dan kilau yang menyapu sekali saat muncul.
+- Pengaturan cepat **Word** dan **Live** (transkrip live) langsung di panel sebagai chip.
+- Saat merekam: timer lebih besar, transkrip live di dalam kartu kaca, tombol stop lebih ringkas.
+- Tepi "kaca" (terang di atas, memudar ke bawah) pada semua tombol, chip, dan kartu: lebih timbul dan modern.
+- Elemen muncul bertahap (sedikit naik dan memudar masuk), bukan sekaligus.
+- Semua efek baru hanya menganimasikan skala/opacity/posisi dan mati bila Reduce motion aktif.
+
 ## 3.2.1
 
 - Perbaikan build: ekspresi posisi konfeti dipecah per langkah (pemeriksa tipe Swift kehabisan waktu).

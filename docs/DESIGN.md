@@ -16,7 +16,9 @@ generik ("AI slop", lihat skill `swiftui-design-skill`).
 | `pink` / `yellow` | `#FF375F` / `#FFD60A` | Logo & tombol Mulai (gradien `brand`: pink → orange → yellow), memproses (gradien `process`: yellow → orange → pink), kata live yang masih dikenali (yellow → orange) |
 | `micSource` / `meetingSource` | yellow / mint | Chip jalur suara saat merekam: suaramu (mic) dan peserta online |
 | `muted` | putih 55% | Teks sekunder (kontras ±6:1 di atas hitam) |
-| `chip` | putih 12% | Latar tombol kapsul/ikon |
+| `chip` | putih 10% | Latar tombol kapsul/ikon |
+| `rim` | putih 24% → 4% (atas → bawah) | Tepi "kaca" pada tombol, chip, dan kartu |
+| `card` | putih 5,5% | Kartu transkrip live |
 
 ## Tipografi
 
@@ -52,6 +54,9 @@ tombol ikon lingkaran 28 pt. Garis tepi putih 8% pada pulau terbuka, 22–30% pa
 | Centang MoM siap + konfeti, riak "Penting" | sekali jalan | |
 | Tombol disorot | spring 0,3 s, skala 1,05 + sedikit terang | |
 | Titik "sedang menulis" | easeInOut 0,4 s bergantian | Hanya saat menyusun MoM |
+| Riak tombol Mulai | easeOut 1,8 s, berulang | Hanya selama panel Siap terbuka; skala + opacity |
+| Kilau tombol Mulai | easeInOut 0,9 s, sekali | Saat panel Siap muncul |
+| Masuk bertahap | spring 0,45 s, jeda 0,02–0,14 s | Setiap isi pulau berganti |
 
 Semua animasi dekoratif mati bila **Reduce motion** aktif di macOS.
 
