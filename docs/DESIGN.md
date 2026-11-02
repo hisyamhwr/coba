@@ -29,7 +29,15 @@ Transkrip live selalu menampilkan kata terbaru: teks lama dipotong di depan deng
 
 ## Bentuk
 
-Pulau ringkas: kapsul penuh. Pulau terbuka: sudut bawah 30 pt (continuous). Tombol: kapsul tinggi 28–46 pt,
+Dua gaya, dipilih di menu bar (**Bentuk: Island / Pill**), berpindah dengan animasi morph:
+
+| Gaya | Bentuk | Ringkas | Terbuka |
+|---|---|---|---|
+| **Island** (bawaan) | Menempel di tepi atas layar/notch. Sudut atas tidak siku: melengkung cekung ke luar ("bahu") sehingga hitamnya mengalir dari tepi layar | bahu 12 pt, sudut bawah 14 pt | bahu 20 pt, sudut bawah 28 pt |
+| **Pill** | Kapsul melayang 8 pt di bawah tepi atas (di bawah notch kamera bila ada), garis tepi putih 14% | kapsul penuh | semua sudut 26 pt |
+
+Bentuknya satu `Shape` (`IslandShape`) dengan tiga nilai yang bisa dianimasikan (bahu, sudut atas, sudut
+bawah), jadi perubahan ukuran dan gaya terlihat sebagai satu gerakan cair. Tombol: kapsul tinggi 28–46 pt,
 tombol ikon lingkaran 28 pt. Garis tepi putih 8% pada pulau terbuka, 22–30% pada tombol bergradien.
 
 ## Gerak

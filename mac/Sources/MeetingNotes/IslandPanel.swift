@@ -6,8 +6,8 @@ import SwiftUI
 /// Ukurannya tidak pernah berubah: pulau di dalamnya yang beranimasi. Area transparan di sekitar pulau
 /// meneruskan klik ke aplikasi di bawahnya (lihat `updateMousePassthrough`).
 final class IslandPanel: NSPanel {
-    /// Cukup untuk ukuran pulau terbesar plus pantulan animasi pegas.
-    static let canvas = CGSize(width: 520, height: 210)
+    /// Cukup untuk ukuran pulau terbesar (plus "bahu" kiri-kanan, jarak pill dari notch, dan pantulan pegas).
+    static let canvas = CGSize(width: 540, height: 270)
 
     override var canBecomeKey: Bool { true }
 
@@ -48,15 +48,14 @@ final class IslandPanel: NSPanel {
     }
 
     /// Terima klik hanya saat kursor berada di atas pulau; di luar itu klik tembus ke aplikasi di bawah.
-    func updateMousePassthrough(islandSize: CGSize) {
+    /// Untuk pill, celah di atasnya (menu bar) tetap tembus.
+    func updateMousePassthrough(islandSize: CGSize, topOffset: CGFloat, shoulder: CGFloat) {
         guard let screen = self.screen ?? NSScreen.main else { return }
         let margin: CGFloat = 8
-        let rect = NSRect(
-            x: screen.frame.midX - islandSize.width / 2 - margin,
-            y: screen.frame.maxY - islandSize.height - margin,
-            width: islandSize.width + margin * 2,
-            height: islandSize.height + margin
-        )
+        let width = islandSize.width + shoulder * 2 + margin * 2
+        let bottom = screen.frame.maxY - topOffset - islandSize.height - margin
+        let top = topOffset > 0 ? screen.frame.maxY - topOffset + margin : screen.frame.maxY
+        let rect = NSRect(x: screen.frame.midX - width / 2, y: bottom, width: width, height: top - bottom)
         let inside = rect.contains(NSEvent.mouseLocation)
         if ignoresMouseEvents == inside {
             ignoresMouseEvents = !inside

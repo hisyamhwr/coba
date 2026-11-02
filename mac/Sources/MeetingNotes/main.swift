@@ -18,6 +18,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         )
         panel.orderFrontRegardless()
         self.panel = panel
+        updateTopInset()
 
         // Status pulau jarang berubah; cukup perbarui menu dan area klik setelah perubahan diterapkan.
         cancellable = controller.state.objectWillChange.sink { [weak self] _ in
@@ -56,7 +57,14 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
     private func updateMousePassthrough() {
         guard let panel, let controller else { return }
-        panel.updateMousePassthrough(islandSize: controller.state.islandSize)
+        let state = controller.state
+        panel.updateMousePassthrough(islandSize: state.islandSize, topOffset: state.topOffset, shoulder: state.shoulder)
+    }
+
+    /// Tinggi notch kamera layar utama (0 bila tidak ada), agar pill tidak tertutup notch.
+    private func updateTopInset() {
+        let inset = (NSScreen.main ?? NSScreen.screens.first)?.safeAreaInsets.top ?? 0
+        if controller.state.topInset != inset { controller.state.topInset = inset }
     }
 
     private func setUpStatusItem() {
@@ -68,6 +76,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         menu.addItem(.separator())
         menu.addItem(NSMenuItem(title: "Buat juga Word (.docx)", action: #selector(toggleDocx), keyEquivalent: ""))
         menu.addItem(NSMenuItem(title: "Transkrip live", action: #selector(toggleLive), keyEquivalent: ""))
+        menu.addItem(.separator())
+        menu.addItem(NSMenuItem(title: "Bentuk: Island (menyatu dengan notch)", action: #selector(useIsland),
+                                keyEquivalent: ""))
+        menu.addItem(NSMenuItem(title: "Bentuk: Pill (melayang)", action: #selector(usePill), keyEquivalent: ""))
         menu.addItem(.separator())
         menu.addItem(NSMenuItem(title: "Meeting Notes v\(Config.version)", action: nil, keyEquivalent: ""))
         menu.addItem(NSMenuItem(title: "Keluar", action: #selector(quit), keyEquivalent: "q"))
@@ -86,6 +98,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                 item.state = controller.state.exportDocx ? .on : .off
             } else if item.action == #selector(toggleLive) {
                 item.state = controller.state.liveTranscript ? .on : .off
+            } else if item.action == #selector(useIsland) {
+                item.state = controller.state.style == .island ? .on : .off
+            } else if item.action == #selector(usePill) {
+                item.state = controller.state.style == .pill ? .on : .off
             }
         }
         switch controller.state.phase {
@@ -99,7 +115,12 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     @objc private func openFolder() { controller.openFolder() }
     @objc private func toggleDocx() { controller.state.exportDocx.toggle() }
     @objc private func toggleLive() { controller.state.liveTranscript.toggle() }
-    @objc private func screenChanged() { panel?.place() }
+    @objc private func useIsland() { controller.state.style = .island }
+    @objc private func usePill() { controller.state.style = .pill }
+    @objc private func screenChanged() {
+        panel?.place()
+        updateTopInset()
+    }
     @objc private func quit() { NSApp.terminate(nil) }
 }
 

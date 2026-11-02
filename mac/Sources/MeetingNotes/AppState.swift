@@ -4,6 +4,14 @@ enum Phase: Equatable {
     case idle, recording, processing, done, failed
 }
 
+/// Bentuk pulau, dipilih di menu bar.
+enum IslandStyle: String {
+    /// Menyatu dengan tepi atas layar/notch: sisi atas melebar dengan lengkungan cekung ("bahu").
+    case island
+    /// Kapsul melayang sedikit di bawah tepi atas, semua sudut membulat.
+    case pill
+}
+
 /// Hasil dari `python -m meeting_notes proses --json` (baris RESULT).
 struct NotesResult: Decodable, Equatable {
     let title: String
@@ -44,7 +52,37 @@ final class AppState: ObservableObject {
         didSet { UserDefaults.standard.set(liveTranscript, forKey: "liveTranscript") }
     }
 
+    /// Bentuk pulau; diingat antar sesi.
+    @Published var style = IslandStyle(rawValue: UserDefaults.standard.string(forKey: "islandStyle") ?? "") ?? .island {
+        didSet { UserDefaults.standard.set(style.rawValue, forKey: "islandStyle") }
+    }
+    /// Tinggi notch kamera layar ini (0 bila tidak ada notch), agar pill tidak tertutup notch.
+    @Published var topInset: CGFloat = 0
+
     var recordingDir: URL?
+
+    /// Lebar lengkungan cekung di kiri-kanan atas (gaya island). Sisi atas pulau melebar sebesar ini di tiap sisi
+    /// sehingga bentuknya mengalir keluar dari tepi layar, bukan menempel dengan sudut siku.
+    var shoulder: CGFloat {
+        style == .pill ? 0 : (isCompact ? 12 : 20)
+    }
+
+    /// Radius sudut atas: 0 untuk island (menempel di tepi layar), sama dengan sudut bawah untuk pill.
+    var topRadius: CGFloat {
+        style == .pill ? bottomRadius : 0
+    }
+
+    var bottomRadius: CGFloat {
+        switch style {
+        case .island: return isCompact ? 14 : 28
+        case .pill: return isCompact ? islandSize.height / 2 : 26
+        }
+    }
+
+    /// Jarak pulau dari tepi atas layar: island menempel, pill melayang di bawah notch (bila ada).
+    var topOffset: CGFloat {
+        style == .pill ? topInset + 8 : 0
+    }
 
     /// Ukuran pulau per status. Jendelanya berukuran tetap; hanya bentuk pulau di dalamnya yang beranimasi.
     var islandSize: CGSize {

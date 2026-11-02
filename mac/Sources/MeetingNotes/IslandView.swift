@@ -98,16 +98,11 @@ struct IslandView: View {
         return CGSize(width: base.width + 16, height: base.height + 4)
     }
 
-    private var radius: CGFloat {
-        state.isCompact ? size.height / 2 : 30
-    }
-
     private var island: some View {
-        let shape = UnevenRoundedRectangle(
-            topLeadingRadius: 0, bottomLeadingRadius: radius,
-            bottomTrailingRadius: radius, topTrailingRadius: 0, style: .continuous
-        )
+        let shoulder = state.shoulder
+        let shape = IslandShape(shoulder: shoulder, topRadius: state.topRadius, bottomRadius: state.bottomRadius)
         let target = state.islandSize
+        let isPill = state.style == .pill
         return ZStack(alignment: .top) {
             shape.fill(Color.black)
             // Ukuran akhir (seperti isi): selama bentuk beranimasi, gradien tidak digambar ulang tiap frame.
@@ -127,13 +122,15 @@ struct IslandView: View {
                 .frame(width: target.width, height: target.height)
                 .opacity(appeared ? 1 : 0)
         }
-        .frame(width: size.width, height: size.height, alignment: .top)
+        // Bentuk hitam selebar badan pulau + "bahu" di kiri-kanan; isi tetap di tengah pada lebar badan.
+        .frame(width: size.width + shoulder * 2, height: size.height, alignment: .top)
         .clipShape(shape)
         .overlay {
             if state.phase == .processing {
                 Aura(shape: shape)
             } else {
-                shape.stroke(Color.white.opacity(state.isCompact ? 0 : 0.08), lineWidth: 1)
+                // Pill melayang di atas wallpaper/menu bar: garis tepi tipis agar tetap terlihat rapi.
+                shape.stroke(Color.white.opacity(isPill ? 0.14 : (state.isCompact ? 0 : 0.08)), lineWidth: 1)
             }
         }
         .scaleEffect(pressed ? 0.96 : 1, anchor: .top)
@@ -142,7 +139,9 @@ struct IslandView: View {
         .onHover { inside in
             withAnimation(Liquid.hover) { hovering = inside }
         }
+        .padding(.top, state.topOffset)
         .animation(Liquid.morph, value: target)
+        .animation(Liquid.morph, value: state.style)
     }
 
     /// Cahaya warna di dalam pulau sesuai status; saat merekam ikut berdenyut mengikuti suara.
@@ -543,6 +542,69 @@ struct IslandView: View {
     }
 }
 
+// MARK: - Bentuk
+
+/// Bentuk pulau yang bisa beranimasi antara dua gaya:
+/// - island: menempel di tepi atas layar. Sudut atas tidak siku, melainkan melengkung cekung ke luar ("bahu",
+///   lebar `shoulder`) sehingga hitamnya mengalir dari tepi layar/notch seperti cairan. Sudut bawah membulat.
+/// - pill: kapsul melayang, semua sudut membulat (`topRadius` = `bottomRadius`, tanpa bahu).
+/// Badan pulau berada di tengah; lebar total bentuk = lebar badan + 2 × `shoulder`. Semua nilai bisa
+/// dianimasikan, jadi perpindahan gaya dan ukuran terlihat sebagai satu gerakan yang mulus.
+struct IslandShape: Shape {
+    var shoulder: CGFloat
+    var topRadius: CGFloat
+    var bottomRadius: CGFloat
+
+    var animatableData: AnimatablePair<CGFloat, AnimatablePair<CGFloat, CGFloat>> {
+        get { AnimatablePair(shoulder, AnimatablePair(topRadius, bottomRadius)) }
+        set {
+            shoulder = newValue.first
+            topRadius = newValue.second.first
+            bottomRadius = newValue.second.second
+        }
+    }
+
+    func path(in rect: CGRect) -> Path {
+        let w = rect.width
+        let h = rect.height
+        // Batasi agar bentuk tetap sah saat sangat kecil (mis. animasi muncul pertama kali).
+        let s = max(0, min(shoulder, h, w / 4))
+        let body = w - s * 2
+        let rt = max(0, min(topRadius, h / 2, body / 2))
+        let rb = max(0, min(bottomRadius, h - s - rt, body / 2))
+        // Konstanta Bézier untuk seperempat lingkaran; (1 - k) = jarak titik kendali dari ujung lengkungan.
+        let c: CGFloat = 1 - 0.5523
+        let x0 = rect.minX + s
+        let x1 = rect.maxX - s
+        let top = rect.minY
+        let bottom = rect.maxY
+
+        var path = Path()
+        // Kiri atas: bahu cekung (island) atau sudut membulat (pill); di antaranya bercampur saat beranimasi.
+        path.move(to: CGPoint(x: x0 + rt - s, y: top))
+        path.addCurve(to: CGPoint(x: x0, y: top + s + rt),
+                      control1: CGPoint(x: x0 + (rt - s) * c, y: top),
+                      control2: CGPoint(x: x0, y: top + (s + rt) * c))
+        // Sisi kiri lalu kiri bawah.
+        path.addLine(to: CGPoint(x: x0, y: bottom - rb))
+        path.addCurve(to: CGPoint(x: x0 + rb, y: bottom),
+                      control1: CGPoint(x: x0, y: bottom - rb * c),
+                      control2: CGPoint(x: x0 + rb * c, y: bottom))
+        // Bawah lalu kanan bawah.
+        path.addLine(to: CGPoint(x: x1 - rb, y: bottom))
+        path.addCurve(to: CGPoint(x: x1, y: bottom - rb),
+                      control1: CGPoint(x: x1 - rb * c, y: bottom),
+                      control2: CGPoint(x: x1, y: bottom - rb * c))
+        // Sisi kanan lalu kanan atas (cermin kiri atas).
+        path.addLine(to: CGPoint(x: x1, y: top + s + rt))
+        path.addCurve(to: CGPoint(x: x1 - rt + s, y: top),
+                      control1: CGPoint(x: x1, y: top + (s + rt) * c),
+                      control2: CGPoint(x: x1 - (rt - s) * c, y: top))
+        path.closeSubpath()
+        return path
+    }
+}
+
 // MARK: - Ikon
 
 /// Logo aplikasi: bola bergradien pink-oranye-kuning dengan gelombang suara. Statis (tanpa biaya animasi);
@@ -732,7 +794,7 @@ private struct LevelGlow: View {
 /// Garis tepi bergradien kuning-oranye-pink saat Claude memproses ("AI sedang bekerja"). Gradiennya statis;
 /// yang beranimasi hanya opacity lapisannya, sehingga GPU tidak perlu menggambar ulang gradien tiap frame.
 private struct Aura: View {
-    let shape: UnevenRoundedRectangle
+    let shape: IslandShape
     @State private var bright = false
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
 

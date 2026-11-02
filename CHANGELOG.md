@@ -2,6 +2,16 @@
 
 Format versi: `MAYOR.FITUR.PERBAIKAN` (lihat [docs/ROADMAP.md](docs/ROADMAP.md)).
 
+## 3.2.0
+
+Bentuk pulau baru, terinspirasi notch app modern (mis. Droppy):
+- **Island** (bawaan): sudut kiri-kanan atas tidak lagi siku dan kaku. Hitamnya melebar dengan lengkungan
+  cekung ("bahu") sehingga terlihat mengalir keluar dari tepi atas layar/notch.
+- **Pill**: kapsul melayang sedikit di bawah tepi atas (di bawah notch kamera bila ada), semua sudut membulat,
+  dengan garis tepi tipis agar rapi di atas wallpaper apa pun.
+- Pilih di menu bar: **Bentuk: Island / Pill**. Pilihan diingat, dan perpindahannya beranimasi (morph).
+- Area klik mengikuti bentuk: celah di atas pill tetap tembus ke menu bar.
+
 ## 3.1.0
 
 Tangkapan suara, transkrip live, dan UI lebih baik, memakai skill `swiftui-expert-skill`,
