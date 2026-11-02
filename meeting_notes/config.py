@@ -8,6 +8,10 @@ from dotenv import load_dotenv
 
 load_dotenv()
 
+# "Mode akurat": large-v3 penuh (32 lapis decoder, turbo hanya 4) lebih tahan terhadap bicara cepat dan
+# belibet, dengan biaya +-3x lebih lambat dan unduhan model +-3 GB sekali.
+ACCURATE_MODEL = "large-v3"
+
 
 def _env_bool(name: str, default: bool) -> bool:
     value = os.getenv(name)

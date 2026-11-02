@@ -30,8 +30,9 @@ SYSTEM_LABEL = "Peserta online"
 # paling akhir karena Whisper memotong prompt yang terlalu panjang dari depan.
 BASE_PROMPT = (
     "Rapat kerja tim produk digital dalam Bahasa Indonesia campur English. "
-    "Oke, FE sama BE sudah siap, fiturnya pakai feature flag dulu, flagging-nya kita nyalakan bertahap. "
-    "PR-nya tolong di-review dan di-merge, lalu deploy ke staging buat SIT dan UAT sebelum production."
+    "Oke, FE sama BE sudah siap, datanya di-fetch dari API, asetnya di-bundling, desain UI/UX dari Figma. "
+    "Fiturnya pakai feature flag, flagging-nya bertahap. PR-nya di-review dan di-merge, "
+    "lalu deploy ke staging buat SIT dan UAT sebelum production."
 )
 
 # Kalimat "halusinasi" khas Whisper saat bagian rekaman sunyi.
@@ -266,7 +267,12 @@ class Transcriber:
         self.engine.download()
 
     def prompt(self) -> str:
-        return f"Istilah: {self.vocabulary}. {BASE_PROMPT}" if self.vocabulary else BASE_PROMPT
+        if not self.vocabulary:
+            return BASE_PROMPT
+        # Whisper hanya memakai +-223 token terakhir dari prompt. Istilah terpenting (urutan pertama di kamus)
+        # ditaruh paling dekat ke akhir, sehingga bila prompt kepanjangan yang terpotong istilah yang kurang penting.
+        terms = ", ".join(reversed(self.vocabulary.split(", ")))
+        return f"Istilah: {terms}. {BASE_PROMPT}"
 
     def transcribe(self, audio: np.ndarray, on_progress: Callable[[float], None] | None = None) -> list[Segment]:
         bounds = chunk_bounds(audio, chunk_seconds=self.chunk_seconds)

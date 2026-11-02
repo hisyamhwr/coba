@@ -29,7 +29,16 @@ diucapkan cepat sebagai kata Inggris yang bunyinya mirip, atau salah menangkap i
 - "legging" / "lagging" (saat membahas fitur yang dinyalakan bertahap) -> "flagging", \
 "fitur flag" -> "feature flag", "bek en" / "beken" -> "backend", \
 "fron en" / "pron end" -> "frontend", "diploi" -> "deploy", "mers" -> "merge", "ripiu" -> "review", \
-"staging" yang tertulis "steging" -> "staging", "story poin" -> "story point"
+"staging" yang tertulis "steging" -> "staging", "story poin" -> "story point", \
+"di fes" / "difech" / "di pet" (saat membahas data/API) -> "di-fetch", "yu ai yu eks" / "ui ux" -> "UI/UX"
+
+Kata kerja Inggris sering diberi awalan Indonesia (di-, nge-, ke-) lalu tertulis sebagai kata \
+Indonesia yang mirip: "dibanding" saat membahas menggabungkan aset/fitur/paket -> "di-bundling" \
+(tetap "dibanding" bila artinya membandingkan), "dimers" -> "di-merge", "dipus" -> "di-push", \
+"ngehit" -> "nge-hit". Kata seperti "direpost" yang tidak masuk akal di rapat developer \
+kemungkinan kata kerja teknis lain yang bunyinya mirip (mis. "di-revert", "di-rebase", \
+"di-report", "di-repro"): pilih yang paling cocok dengan kalimat dan topiknya. Jika tidak ada \
+yang jelas cocok, biarkan.
 
 Istilah developer dan produk digital sangat sering salah tangkap. Kenali istilah seperti FE \
 (frontend), BE (backend), DS (mis. design system), QA, PR (pull request), merge, deploy, staging, \

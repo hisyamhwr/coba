@@ -37,6 +37,10 @@ final class AppState: ObservableObject {
     @Published var exportDocx = UserDefaults.standard.bool(forKey: "exportDocx") {
         didSet { UserDefaults.standard.set(exportDocx, forKey: "exportDocx") }
     }
+    /// Mode akurat: Whisper large-v3 penuh, lebih tahan bicara cepat/belibet tetapi +-3x lebih lambat.
+    @Published var accurateMode = UserDefaults.standard.bool(forKey: "accurateMode") {
+        didSet { UserDefaults.standard.set(accurateMode, forKey: "accurateMode") }
+    }
     /// Transkrip live bisa dimatikan untuk menghemat CPU/baterai; diingat antar sesi.
     @Published var liveTranscript = UserDefaults.standard.object(forKey: "liveTranscript") as? Bool ?? true {
         didSet { UserDefaults.standard.set(liveTranscript, forKey: "liveTranscript") }
@@ -47,7 +51,7 @@ final class AppState: ObservableObject {
     /// Ukuran pulau per status. Jendelanya berukuran tetap; hanya bentuk pulau di dalamnya yang beranimasi.
     var islandSize: CGSize {
         switch phase {
-        case .idle: return expanded ? CGSize(width: 320, height: 142) : CGSize(width: 170, height: 32)
+        case .idle: return expanded ? CGSize(width: 320, height: 166) : CGSize(width: 170, height: 32)
         case .recording: return expanded ? CGSize(width: 460, height: 178) : CGSize(width: 250, height: 32)
         case .processing: return CGSize(width: 380, height: 100)
         case .done: return CGSize(width: 440, height: 136)

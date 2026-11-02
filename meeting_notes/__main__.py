@@ -10,7 +10,7 @@ import json
 from datetime import datetime
 from pathlib import Path
 
-from .config import Settings
+from .config import ACCURATE_MODEL, Settings
 
 
 def main() -> None:
@@ -21,6 +21,8 @@ def main() -> None:
     proses.add_argument("--penting", type=Path, help="File JSON berisi daftar detik 'Tandai penting'")
     proses.add_argument("--mulai", help="Waktu mulai rapat (ISO 8601), untuk nama file dan tanggal notulen")
     proses.add_argument("--docx", action="store_true", help="Buat juga file Word (.docx)")
+    proses.add_argument("--akurat", action="store_true",
+                        help="Whisper large-v3 (lebih akurat untuk bicara cepat, +-3x lebih lambat)")
     proses.add_argument("--json", action="store_true", help="Keluaran untuk aplikasi Mac: STATUS/RESULT per baris")
     banding = sub.add_parser("bandingkan", help="Bandingkan hasil transkripsi beberapa mesin pada rekaman yang sama")
     banding.add_argument("audio", type=Path, help="File audio (wav, mp3, m4a, ...)")
@@ -38,6 +40,8 @@ def main() -> None:
         settings = Settings()
         if args.docx:
             settings.export_docx = True
+        if args.akurat:
+            settings.whisper_model = ACCURATE_MODEL
         result = process_recording(args.audio, settings, started_at, on_status, marks=marks)
         if args.json:
             print("RESULT\t" + json.dumps({

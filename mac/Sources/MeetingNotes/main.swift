@@ -64,6 +64,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         menu.addItem(.separator())
         menu.addItem(NSMenuItem(title: "Buat juga Word (.docx)", action: #selector(toggleDocx), keyEquivalent: ""))
         menu.addItem(NSMenuItem(title: "Transkrip live", action: #selector(toggleLive), keyEquivalent: ""))
+        menu.addItem(NSMenuItem(title: "Mode akurat (lebih lambat)", action: #selector(toggleAccurate),
+                                keyEquivalent: ""))
         menu.addItem(.separator())
         menu.addItem(NSMenuItem(title: "Meeting Notes v\(Config.version)", action: nil, keyEquivalent: ""))
         menu.addItem(NSMenuItem(title: "Keluar", action: #selector(quit), keyEquivalent: "q"))
@@ -82,6 +84,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                 item.state = controller.state.exportDocx ? .on : .off
             } else if item.action == #selector(toggleLive) {
                 item.state = controller.state.liveTranscript ? .on : .off
+            } else if item.action == #selector(toggleAccurate) {
+                item.state = controller.state.accurateMode ? .on : .off
             }
         }
         switch controller.state.phase {
@@ -95,6 +99,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     @objc private func openFolder() { controller.openFolder() }
     @objc private func toggleDocx() { controller.state.exportDocx.toggle() }
     @objc private func toggleLive() { controller.state.liveTranscript.toggle() }
+    @objc private func toggleAccurate() { controller.state.accurateMode.toggle() }
     @objc private func screenChanged() { panel?.place() }
     @objc private func quit() { NSApp.terminate(nil) }
 }

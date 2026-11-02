@@ -316,7 +316,8 @@ def test_transcriber_prompt_includes_vocabulary():
     assert "Istilah" not in t.prompt()
     t.vocabulary = "VoIP, frontend"
     # Daftar istilah di depan, contoh kalimat di akhir (Whisper memotong prompt panjang dari depan).
-    assert t.prompt().startswith("Istilah: VoIP, frontend. ")
+    # Istilah terpenting (pertama di kamus) paling dekat ke akhir prompt.
+    assert t.prompt().startswith("Istilah: frontend, VoIP. ")
     assert t.prompt().endswith("production.")
 
 

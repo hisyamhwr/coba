@@ -8,6 +8,10 @@ BE
 DS
 flagging
 feature flag
+bundling
+bundle
+fetch
+UI/UX
 toggle
 QA
 PR
@@ -48,6 +52,15 @@ GitHub
 repo
 branch
 commit
+push
+pull
+rebase
+revert
+cherry-pick
+conflict
+resolve
+reproduce
+hit API
 code review
 review
 approve

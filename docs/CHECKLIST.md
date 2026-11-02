@@ -106,7 +106,9 @@ Server tidak punya Swift/macOS, jadi semua butir di bawah ⚠️ sampai berhasil
   sungguhan (11/11 benar, 0 koreksi keliru di rapat non-teknis)
 - ⚠️ **2.1.0** Rekaman dua jalur (`mic.wav`, `sistem.wav`) ditranskripsi terpisah, label "Saya (mic)" /
   "Peserta online", gema speaker dibuang (Python teruji; Swift menunggu QA di Mac)
-- ⬜ **2.2.0** Perpustakaan rapat: riwayat semua rapat, pencarian, dan "Tanya ke rapat"
-- ⬜ **2.3.0** Label pembicara per orang untuk peserta online (Whisper lokal); sudah ada di mesin cloud sejak 1.2.0
+- ⚠️ **2.2.0** Mode akurat (Whisper large-v3) di pulau/menu bar dan `proses --akurat` (menunggu QA di Mac);
+  istilah bundling, fetch, UI/UX, kata kerja ber-awalan di-/nge- (☑️ teruji dengan Claude sungguhan)
+- ⬜ **2.3.0** Perpustakaan rapat: riwayat semua rapat, pencarian, dan "Tanya ke rapat"
+- ⬜ **2.4.0** Label pembicara per orang untuk peserta online (Whisper lokal); sudah ada di mesin cloud sejak 1.2.0
 
 Dibatalkan atas permintaan: integrasi kalender, deteksi rapat otomatis, dan bagikan ke Slack/Notion/email.

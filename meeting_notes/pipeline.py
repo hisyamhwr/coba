@@ -11,7 +11,7 @@ import numpy as np
 import soundfile as sf
 
 from .cloud_stt import PROVIDERS, transcribe_with_fallback
-from .config import Settings
+from .config import ACCURATE_MODEL, Settings
 from .exporter import MeetingInfo, render_markdown, write_docx
 from .glossary import Glossary, apply_corrections
 from .summarizer import make_summarizer
@@ -88,7 +88,10 @@ def transcribe(
             except Exception as exc:  # noqa: BLE001 - rapat tetap tercatat dengan Whisper lokal
                 note = f"{provider.name} gagal ({str(exc)[:150]}), memakai Whisper lokal."
 
-    on_status("Mentranskrip audio (lokal)...")
+    if settings.whisper_model == ACCURATE_MODEL:
+        on_status("Mentranskrip mode akurat (pertama kali mengunduh model +-3 GB)...")
+    else:
+        on_status("Mentranskrip audio (lokal)...")
     transcriber = transcriber or Transcriber(settings.whisper_model, settings.language, settings.whisper_engine)
     transcriber.vocabulary = glossary.whisper_hint()
     if tracks and all(speech_level(track) >= SPEECH_LEVEL for track in tracks):

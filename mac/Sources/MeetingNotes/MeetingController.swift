@@ -150,7 +150,7 @@ final class MeetingController {
         self.processor = processor
         processor.run(
             audio: dir.appendingPathComponent("meeting.wav"), marks: marksURL, startedAt: startedAt,
-            docx: state.exportDocx,
+            docx: state.exportDocx, accurate: state.accurateMode,
             onStatus: { [weak self] message in
                 Task { @MainActor in self?.updateStep(message) }
             },

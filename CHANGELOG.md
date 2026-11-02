@@ -2,6 +2,22 @@
 
 Format versi: `MAYOR.FITUR.PERBAIKAN` (lihat [docs/ROADMAP.md](docs/ROADMAP.md)).
 
+## 2.2.0
+
+- **Mode akurat** untuk pembicara yang cepat atau belibet:
+  - Aktifkan dengan centang di pulau, di menu bar, atau lewat `proses --akurat`.
+  - Memakai Whisper large-v3 penuh (32 lapis decoder; turbo hanya 4).
+  - Konsekuensi: ±3x lebih lambat, dan pertama kali mengunduh model ±3 GB.
+- Istilah baru: bundling, fetch, UI/UX, push, rebase, revert, cherry-pick, conflict, hit API, dll.
+- Claude mengenali kata kerja Inggris ber-awalan Indonesia yang salah tangkap:
+  - "dibanding" → "di-bundling" bila membahas aset/paket (tetap "dibanding" bila artinya membandingkan);
+  - "di fes" → "di-fetch", "yu ai yu eks" → "UI/UX";
+  - kata yang tidak masuk akal seperti "direpost" ditebak dari konteks, mis. "di-revert".
+  - Diuji dengan Claude sungguhan: semua benar, tidak ada regresi pada uji 2.1.0, tidak ada koreksi keliru di
+    rapat non-teknis.
+- Prompt Whisper: istilah terpenting ditaruh paling dekat ke akhir, karena Whisper hanya membaca ±223 token
+  terakhir dari prompt.
+
 ## 2.1.0
 
 Istilah developer dan kualitas tangkapan suara.
