@@ -49,6 +49,8 @@ final class Processor {
         ] + (docx ? ["--docx"] : [])
         process.currentDirectoryURL = URL(fileURLWithPath: Config.repoPath)
         process.environment = Self.pythonEnvironment()
+        // Whisper & Claude memakai CPU berat; prioritas di bawah tampilan agar animasi pulau tetap mulus.
+        process.qualityOfService = .utility
 
         let stdout = Pipe()
         let stderr = Pipe()

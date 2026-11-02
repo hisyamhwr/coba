@@ -33,10 +33,13 @@ tombol ikon lingkaran 28 pt. Garis tepi putih 8% pada pulau terbuka, 22–30% pa
 | Isi masuk / keluar | spring 0,32 s (+0,06 s) / easeIn 0,08 s | |
 | Tekan tombol | spring 0,22 s, skala 0,92 + sedikit gelap | Disertai getaran halus trackpad untuk aksi utama |
 | Equalizer & cahaya rekam | spring 0,25 s, hanya saat level suara berubah | Tidak ada animasi per frame selama rapat |
-| Garis cahaya berputar | linear 2,8 s, berulang | Hanya saat memproses (singkat), dirender GPU |
+| Garis tepi gradien "bernapas" | easeInOut 1,1 s, berulang | Hanya saat memproses; hanya opacity yang beranimasi |
 | Centang MoM siap, riak "Penting" | sekali jalan | |
 
 Semua animasi dekoratif mati bila **Reduce motion** aktif di macOS.
+
+Aturan performa: hindari `shadow`, `mask`, `blur`, dan `drawingGroup` pada apa pun yang ikut beranimasi;
+animasikan opacity/transform, bukan warna atau ukuran gradien; lapisan dekoratif diberi ukuran akhir pulau.
 
 ## Status
 

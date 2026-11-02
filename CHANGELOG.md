@@ -2,6 +2,19 @@
 
 Format versi: `MAYOR.FITUR.PERBAIKAN` (lihat [docs/ROADMAP.md](docs/ROADMAP.md)).
 
+## 2.3.3
+
+Animasi lebih mulus dan ringan:
+
+- Cahaya di dalam pulau tidak lagi digambar ulang setiap frame saat pulau melebar/menyusut (disusun pada
+  ukuran akhir); kekuatan cahaya dan denyut mengikuti suara kini lewat opacity lapisan, bukan menggambar ulang
+  gradien.
+- Garis cahaya berputar saat memproses (paling berat: gradien besar dirender ulang setiap frame) diganti garis
+  tepi bergradien yang "bernapas".
+- Bayangan pada tombol Mulai dan Stop (blur mahal, dihitung ulang saat beranimasi) diganti cahaya gradien statis.
+- Pudar pada transkrip live memakai gradien warna teks, bukan mask (mask memaksa render tambahan setiap frame).
+- Proses Python (Whisper & Claude) berjalan dengan prioritas di bawah tampilan.
+
 ## 2.3.2
 
 Ikon dan animasi lebih hidup, tetap ringan. Sistem desain didokumentasikan di [docs/DESIGN.md](docs/DESIGN.md).

@@ -87,7 +87,9 @@ struct IslandView: View {
         let target = state.islandSize
         return ZStack(alignment: .top) {
             shape.fill(Color.black)
+            // Ukuran akhir (seperti isi): selama bentuk beranimasi, gradien tidak digambar ulang tiap frame.
             glow
+                .frame(width: target.width, height: target.height)
             content
                 .id(contentKey)
                 .transition(.asymmetric(
@@ -106,7 +108,7 @@ struct IslandView: View {
         .clipShape(shape)
         .overlay {
             if state.phase == .processing {
-                Aura(shape: shape).transition(.opacity)
+                Aura(shape: shape)
             } else {
                 shape.stroke(Color.white.opacity(state.isCompact ? 0 : 0.08), lineWidth: 1)
             }
@@ -214,7 +216,6 @@ struct IslandView: View {
                 .frame(height: 46)
                 .background(Capsule().fill(Palette.brand))
                 .overlay(Capsule().strokeBorder(Color.white.opacity(0.25), lineWidth: 1))
-                .shadow(color: Palette.red.opacity(0.45), radius: 12, y: 2)
             }
             .buttonStyle(PressableStyle())
             .disabled(state.starting)
@@ -301,7 +302,9 @@ struct IslandView: View {
                         .frame(width: 38, height: 38)
                         .background(Circle().fill(Palette.record))
                         .overlay(Circle().strokeBorder(Color.white.opacity(0.25), lineWidth: 1))
-                        .shadow(color: Palette.red.opacity(0.5), radius: 10)
+                        .background(Circle().fill(RadialGradient(colors: [Palette.red.opacity(0.5), .clear],
+                                                                 center: .center, startRadius: 14, endRadius: 30))
+                            .frame(width: 60, height: 60))
                 }
                 .buttonStyle(PressableStyle())
                 .help("Selesai & susun MoM")
@@ -579,7 +582,9 @@ private struct Glow: View {
     var radius: CGFloat = 240
 
     var body: some View {
-        RadialGradient(colors: [color.opacity(strength), .clear], center: center, startRadius: 0, endRadius: radius)
+        // Warna gradien tetap; kekuatan diatur lewat opacity lapisan (murah, tanpa menggambar ulang gradien).
+        RadialGradient(colors: [color, .clear], center: center, startRadius: 0, endRadius: radius)
+            .opacity(strength)
             .animation(.easeOut(duration: 0.4), value: strength)
             .allowsHitTesting(false)
     }
@@ -591,39 +596,31 @@ private struct LevelGlow: View {
     @ObservedObject var meter: LiveMeter
 
     var body: some View {
-        let level = Double(meter.level)
-        RadialGradient(
-            colors: [Palette.red.opacity(0.22 + level * 0.45), Palette.orange.opacity(0.1), .clear],
-            center: .top, startRadius: 0, endRadius: 260
-        )
-        .animation(.easeOut(duration: 0.18), value: meter.level)
-        .allowsHitTesting(false)
+        RadialGradient(colors: [Palette.red, Palette.orange.opacity(0.25), .clear],
+                       center: .top, startRadius: 0, endRadius: 260)
+            .opacity(0.22 + Double(meter.level) * 0.45)
+            .animation(.easeOut(duration: 0.18), value: meter.level)
+            .allowsHitTesting(false)
     }
 }
 
-/// Garis cahaya berwarna yang berputar mengelilingi pulau saat Claude memproses (gaya "AI sedang bekerja").
-/// Dirender sebagai satu lapisan GPU (drawingGroup); berhenti sendiri saat status berganti.
+/// Garis tepi bergradien biru-ungu-pink saat Claude memproses (gaya "AI sedang bekerja"). Gradiennya statis;
+/// yang beranimasi hanya opacity lapisannya, sehingga GPU tidak perlu menggambar ulang gradien tiap frame.
 private struct Aura: View {
     let shape: UnevenRoundedRectangle
-    @State private var spin = false
+    @State private var bright = false
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
     var body: some View {
-        GeometryReader { geo in
-            let side = max(geo.size.width, geo.size.height) * 1.5
-            AngularGradient(colors: [Palette.blue, Palette.purple, Palette.pink, Palette.orange, Palette.blue],
-                            center: .center)
-                .frame(width: side, height: side)
-                .rotationEffect(.degrees(spin ? 360 : 0))
-                .position(x: geo.size.width / 2, y: geo.size.height / 2)
-        }
-        .mask(shape.stroke(lineWidth: 2))
-        .drawingGroup()
-        .allowsHitTesting(false)
-        .onAppear {
-            guard !reduceMotion else { return }
-            withAnimation(.linear(duration: 2.8).repeatForever(autoreverses: false)) { spin = true }
-        }
+        shape
+            .stroke(LinearGradient(colors: [Palette.blue, Palette.purple, Palette.pink, Palette.orange],
+                                   startPoint: .leading, endPoint: .trailing), lineWidth: 1.5)
+            .opacity(bright ? 1 : 0.45)
+            .allowsHitTesting(false)
+            .onAppear {
+                guard !reduceMotion else { return }
+                withAnimation(.easeInOut(duration: 1.1).repeatForever(autoreverses: true)) { bright = true }
+            }
     }
 }
 
@@ -676,13 +673,15 @@ private struct LiveText: View {
     var body: some View {
         Text(meter.liveText.isEmpty ? "Mendengarkan…" : meter.liveText)
             .font(.system(size: 17, weight: .semibold, design: .rounded))
-            .foregroundStyle(meter.liveText.isEmpty ? Palette.muted : .white)
             .lineLimit(3)
             .frame(maxWidth: .infinity, alignment: .bottomLeading)
             .frame(height: 66, alignment: .bottomLeading)
-            .mask(LinearGradient(stops: [.init(color: .black.opacity(0.25), location: 0),
-                                         .init(color: .black, location: 0.45)],
-                                 startPoint: .top, endPoint: .bottom))
+            // Gradien langsung di warna teks (bukan mask, yang memaksa render offscreen setiap frame).
+            .foregroundStyle(meter.liveText.isEmpty
+                ? AnyShapeStyle(Palette.muted)
+                : AnyShapeStyle(LinearGradient(stops: [.init(color: .white.opacity(0.3), location: 0),
+                                                       .init(color: .white, location: 0.5)],
+                                               startPoint: .top, endPoint: .bottom)))
     }
 }
 
