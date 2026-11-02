@@ -19,8 +19,22 @@ final class Processor {
     private var stderrTail = ""
     private var result: NotesResult?
 
+    /// Environment untuk Python, seperti setelah `conda activate`.
+    static func pythonEnvironment() -> [String: String] {
+        // Aplikasi yang dibuka dari Finder tidak membawa PATH terminal; tambahkan lokasi umum `claude`.
+        var env = ProcessInfo.processInfo.environment
+        let home = FileManager.default.homeDirectoryForCurrentUser.path
+        // Tiru "conda activate": folder bin environment di depan PATH dan CONDA_PREFIX terisi.
+        let envBin = URL(fileURLWithPath: Config.pythonPath).deletingLastPathComponent()
+        env["CONDA_PREFIX"] = envBin.deletingLastPathComponent().path
+        env["PATH"] = [envBin.path, "\(home)/.local/bin", "/opt/homebrew/bin", "/usr/local/bin",
+                       env["PATH"] ?? "/usr/bin:/bin"].joined(separator: ":")
+        env["PYTHONUNBUFFERED"] = "1"
+        return env
+    }
+
     func run(
-        audio: URL, marks: URL, startedAt: Date, docx: Bool, accurate: Bool,
+        audio: URL, marks: URL, startedAt: Date, docx: Bool,
         onStatus: @escaping (String) -> Void,
         onFinish: @escaping (Result<NotesResult, Error>) -> Void
     ) {
@@ -32,18 +46,9 @@ final class Processor {
         process.arguments = [
             "-m", "meeting_notes", "proses", audio.path, "--json",
             "--penting", marks.path, "--mulai", formatter.string(from: startedAt),
-        ] + (docx ? ["--docx"] : []) + (accurate ? ["--akurat"] : [])
+        ] + (docx ? ["--docx"] : [])
         process.currentDirectoryURL = URL(fileURLWithPath: Config.repoPath)
-        // Aplikasi yang dibuka dari Finder tidak membawa PATH terminal; tambahkan lokasi umum `claude`.
-        var env = ProcessInfo.processInfo.environment
-        let home = FileManager.default.homeDirectoryForCurrentUser.path
-        // Tiru "conda activate": folder bin environment di depan PATH dan CONDA_PREFIX terisi.
-        let envBin = URL(fileURLWithPath: Config.pythonPath).deletingLastPathComponent()
-        env["CONDA_PREFIX"] = envBin.deletingLastPathComponent().path
-        env["PATH"] = [envBin.path, "\(home)/.local/bin", "/opt/homebrew/bin", "/usr/local/bin",
-                       env["PATH"] ?? "/usr/bin:/bin"].joined(separator: ":")
-        env["PYTHONUNBUFFERED"] = "1"
-        process.environment = env
+        process.environment = Self.pythonEnvironment()
 
         let stdout = Pipe()
         let stderr = Pipe()
@@ -101,5 +106,38 @@ final class Processor {
             onFinish(.failure(ProcessorError.failed(
                 "Python tidak ditemukan di \(Config.pythonPath). Jalankan ulang mac/build.sh dari environment conda.")))
         }
+    }
+}
+
+/// Transkripsi di latar belakang selama rapat: `python -m meeting_notes ikuti <folder>`.
+///
+/// Saat rapat selesai, `proses` hanya perlu mentranskripsi beberapa menit terakhir. Prosesnya berprioritas
+/// rendah agar Zoom/Teams tetap lancar, dan boleh dihentikan kapan saja (hasil disimpan per potongan).
+final class LiveWorker {
+    private let process = Process()
+
+    init(folder: URL) {
+        process.executableURL = URL(fileURLWithPath: Config.pythonPath)
+        process.arguments = ["-m", "meeting_notes", "ikuti", folder.path]
+        process.currentDirectoryURL = URL(fileURLWithPath: Config.repoPath)
+        process.environment = Processor.pythonEnvironment()
+        process.qualityOfService = .utility
+        let log = folder.appendingPathComponent("ikuti.log")
+        FileManager.default.createFile(atPath: log.path, contents: nil)
+        if let handle = try? FileHandle(forWritingTo: log) {
+            process.standardOutput = handle
+            process.standardError = handle
+        }
+    }
+
+    func start() {
+        try? process.run()
+    }
+
+    /// Hentikan dan tunggu sampai benar-benar keluar, agar model Whisper tidak dimuat dua kali bersamaan.
+    func stop() {
+        guard process.isRunning else { return }
+        process.terminate()
+        process.waitUntilExit()
     }
 }

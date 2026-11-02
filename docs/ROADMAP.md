@@ -24,8 +24,9 @@ Target: aplikasi pencatat rapat ala Fireflies yang berjalan langsung di Mac, tan
 | 2.0.0 | Aplikasi Mac native: UI notch ala Dynamic Island, rekam audio Zoom/Meet/Teams langsung, transkrip live, tombol tandai penting, MoM otomatis | ✅ Kode selesai, menunggu build & QA di Mac ([QA.md](QA.md)) |
 | 2.1.0 | Istilah developer (FE, BE, DS, flagging, PR, SIT/UAT, ...), rekaman dua jalur (mic & meeting) ditranskripsi terpisah dengan label "Saya (mic)" / "Peserta online" | ✅ Kode selesai, menunggu QA di Mac |
 | 2.2.0 | Mode akurat (Whisper large-v3) untuk bicara cepat/belibet; istilah bundling, fetch, UI/UX, kata kerja ber-awalan (di-fetch, di-revert) | ✅ Kode selesai, menunggu QA di Mac |
-| 2.3.0 | Perpustakaan rapat, pencarian, dan "Tanya ke rapat" | |
-| 2.4.0 | Label pembicara per orang untuk peserta online (Whisper lokal) | Mic vs meeting sudah dibedakan di 2.1.0; per orang sudah ada lewat mesin cloud di 1.2.0 |
+| 2.3.0 | Optimasi: transkripsi di latar belakang selama rapat, model dipilih otomatis (large-v3 bila Mac kuat), hening dipangkas, MoM via Sonnet (±25 detik untuk rapat 1 jam) | ✅ Kode selesai, menunggu QA di Mac |
+| 2.4.0 | Perpustakaan rapat, pencarian, dan "Tanya ke rapat" | |
+| 2.5.0 | Label pembicara per orang untuk peserta online (Whisper lokal) | Mic vs meeting sudah dibedakan di 2.1.0; per orang sudah ada lewat mesin cloud di 1.2.0 |
 
 Referensi UI untuk 2.0.0 ada di [`design-references/`](design-references/). Status lengkap: [CHECKLIST.md](CHECKLIST.md).
 

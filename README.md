@@ -173,9 +173,10 @@ putus), aplikasi otomatis kembali ke Whisper lokal dan mencatatnya di notulen.
 | `TRANSCRIPTION_ENGINE` | `lokal` | `lokal` (Whisper), `elevenlabs`, `assemblyai`, atau `deepgram` |
 | `ELEVENLABS_API_KEY` / `ASSEMBLYAI_API_KEY` / `DEEPGRAM_API_KEY` | – | API key mesin cloud |
 | `SUMMARIZER` | `auto` | `auto`, `claude-code` (langganan Pro/Max), `api` (berbayar), atau `none` (transkrip saja) |
-| `CLAUDE_CODE_MODEL` | – | Model untuk mode `claude-code`, mis. `sonnet` atau `opus`. Kosong = default akunmu |
+| `CLAUDE_CODE_MODEL` | `sonnet` | Model untuk mode `claude-code`. Sonnet: MoM rapat 1 jam ±25 detik; `opus` lebih lambat |
+| `CLAUDE_CODE_EFFORT` | `medium` | `low`, `medium`, atau `high` |
 | `ANTHROPIC_API_KEY` | – | Hanya untuk mode `api` |
-| `WHISPER_MODEL` | `large-v3-turbo` | `small` lebih cepat tapi kurang akurat; `large-v3` sedikit lebih akurat tapi berat untuk RAM 8 GB |
+| `WHISPER_MODEL` | `auto` | `large-v3` di Mac Apple Silicon dengan RAM ≥ 16 GB (berjalan di latar belakang selama rapat), selain itu `large-v3-turbo`. Bisa dipaksa ke salah satunya |
 | `WHISPER_ENGINE` | `auto` | `mlx` (Mac M1/M2/...), `faster-whisper` (Windows/Linux/Mac Intel) |
 | `MEETING_LANGUAGE` | `id` | Bahasa utama rapat. `id` tetap menangkap istilah Inggris; pakai `auto` jika rapat dominan Inggris |
 | `EXPORT_DOCX` | `false` | Buat juga file Word (.docx); bisa juga lewat centang di widget/aplikasi Mac |

@@ -2,6 +2,7 @@
 
     python -m meeting_notes                 # buka widget
     python -m meeting_notes proses rapat.wav  # proses rekaman yang sudah ada
+    python -m meeting_notes ikuti <folder>    # transkripsi di latar belakang selama rapat (aplikasi Mac)
     python -m meeting_notes bandingkan rapat.wav --mulai 60 --durasi 300  # uji tanding mesin transkripsi
 """
 
@@ -10,7 +11,7 @@ import json
 from datetime import datetime
 from pathlib import Path
 
-from .config import ACCURATE_MODEL, Settings
+from .config import Settings
 
 
 def main() -> None:
@@ -22,8 +23,10 @@ def main() -> None:
     proses.add_argument("--mulai", help="Waktu mulai rapat (ISO 8601), untuk nama file dan tanggal notulen")
     proses.add_argument("--docx", action="store_true", help="Buat juga file Word (.docx)")
     proses.add_argument("--akurat", action="store_true",
-                        help="Whisper large-v3 (lebih akurat untuk bicara cepat, +-3x lebih lambat)")
+                        help="Paksa Whisper large-v3 (default: dipilih otomatis sesuai kemampuan Mac)")
     proses.add_argument("--json", action="store_true", help="Keluaran untuk aplikasi Mac: STATUS/RESULT per baris")
+    ikuti = sub.add_parser("ikuti", help="Transkripsi rekaman yang sedang berjalan di latar belakang")
+    ikuti.add_argument("folder", type=Path, help="Folder rekaman berisi sistem.wav dan mic.wav")
     banding = sub.add_parser("bandingkan", help="Bandingkan hasil transkripsi beberapa mesin pada rekaman yang sama")
     banding.add_argument("audio", type=Path, help="File audio (wav, mp3, m4a, ...)")
     banding.add_argument("--mulai", type=float, default=0, help="Detik awal potongan (default 0)")
@@ -41,6 +44,8 @@ def main() -> None:
         if args.docx:
             settings.export_docx = True
         if args.akurat:
+            from .transcriber import ACCURATE_MODEL
+
             settings.whisper_model = ACCURATE_MODEL
         result = process_recording(args.audio, settings, started_at, on_status, marks=marks)
         if args.json:
@@ -55,6 +60,24 @@ def main() -> None:
                 print(f"Word     : {result.docx_path}")
             if result.note:
                 print(f"Catatan  : {result.note}")
+    elif args.command == "ikuti":
+        from .glossary import Glossary
+        from .incremental import follow
+        from .transcriber import Transcriber
+
+        settings = Settings()
+        transcriber = Transcriber(settings.whisper_model, settings.language, settings.whisper_engine)
+        transcriber.vocabulary = Glossary(settings.glossary_path).whisper_hint()
+
+        def log(msg: str) -> None:
+            print(f"{datetime.now():%H:%M:%S}  {msg}", flush=True)
+
+        # Unduh model selagi rapat baru dimulai (pertama kali saja), agar potongan pertama tidak tertahan.
+        try:
+            transcriber.download()
+        except Exception as exc:  # noqa: BLE001 - tetap jalan; proses akhir akan mencoba lagi
+            log(f"Gagal mengunduh model {transcriber.model_size}: {exc}")
+        follow(args.folder, transcriber, log=log)
     elif args.command == "bandingkan":
         from .compare import compare, open_report
 

@@ -29,8 +29,11 @@ from meeting_notes.transcriber import (
     clean_segments,
     collapse_repeats,
     normalize_loudness,
+    Condensed,
     format_timestamp,
     merge_tracks,
+    resolve_model,
+    speech_spans,
     to_paragraphs,
 )
 
@@ -158,7 +161,9 @@ def test_transcriber_offsets_chunks_and_skips_silence():
     assert transcriber.engine.calls == 3
     assert [s.text for s in segments] == ["potongan 1", "potongan 2", "potongan 3"]
     assert segments[0].start == 0.5
-    assert segments[-1].start == 50400 / 16000 + 0.5
+    # Potongan terakhir dimulai 3,15 s, suara baru mulai 4,0 s: hening di depannya dipangkas (sisa jeda 0,3 s
+    # sebelum suara + penyelarasan 100 ms), lalu waktu dari Whisper dipetakan kembali ke rekaman asli.
+    assert segments[-1].start == pytest.approx(4.15)
     assert progress[-1] == 1.0
 
 
@@ -231,6 +236,25 @@ def test_claude_code_summarizer(monkeypatch):
     assert "ANTHROPIC_API_KEY" not in calls["env"]
     assert calls["input"].startswith("<kamus>\nVoIP\n</kamus>")
     assert calls["input"].endswith("<transkrip>\n[00:00] halo\n</transkrip>")
+
+
+def test_claude_code_summarizer_uses_effort_and_falls_back_on_old_cli(monkeypatch):
+    commands = []
+
+    def fake_run(cmd, **kwargs):
+        commands.append(cmd)
+        if "--effort" in cmd:  # Claude Code versi lama
+            return SimpleNamespace(returncode=1, stdout="", stderr="error: unknown option '--effort'")
+        out = {"is_error": False, "structured_output": SUMMARY.model_dump()}
+        return SimpleNamespace(returncode=0, stdout=json.dumps(out), stderr="")
+
+    monkeypatch.setattr(summarizer_module.subprocess, "run", fake_run)
+    assert ClaudeCodeSummarizer("claude", model="sonnet", effort="medium").summarize("x") == SUMMARY
+    assert commands[0][-4:] == ["--model", "sonnet", "--effort", "medium"]
+    assert "--effort" not in commands[1]
+    # Bawaan: Sonnet dengan effort medium (MoM rapat 1 jam +-25 detik).
+    chosen = ClaudeCodeSummarizer("claude", Settings().claude_code_model, effort=Settings().claude_code_effort)
+    assert (chosen.model, chosen.effort) == ("sonnet", "medium")
 
 
 def test_claude_code_summarizer_reports_login_error(monkeypatch):
@@ -421,15 +445,18 @@ class TrackTranscriber:
     """Mengembalikan transkrip berbeda tergantung jalur mana yang ditranskripsi (dibedakan dari volumenya)."""
 
     vocabulary = ""
+    model_size = "large-v3-turbo"
 
     def __init__(self):
         self.calls = []
 
-    def transcribe(self, audio, on_progress=None):
+    def transcribe(self, audio, on_progress=None, offset=0.0):
         level = float(np.abs(audio).max())
         self.calls.append(level)
         if on_progress:
             on_progress(1.0)
+        if level < 1e-3:
+            return []  # hening: Whisper (dengan pemangkasan hening) tidak menghasilkan apa pun
         if level > 0.25:
             return [Segment(1, 3, "Deploy ke staging hari ini ya")]
         return [Segment(4, 6, "Siap, saya cek flagging-nya")]
@@ -464,5 +491,112 @@ def test_pipeline_uses_mix_when_meeting_track_is_silent(tmp_path, monkeypatch):
     transcriber = TrackTranscriber()
     result = process_recording(tmp_path / "meeting.wav", Settings(output_dir=tmp_path / "out"),
                                INFO.started_at, lambda _: None, transcriber)
-    assert len(transcriber.calls) == 1
-    assert "Saya (mic):" not in result.markdown_path.read_text(encoding="utf-8")
+    md = result.markdown_path.read_text(encoding="utf-8")
+    assert "Siap, saya cek flagging-nya" in md
+    assert "Saya (mic):" not in md
+
+
+def test_condensed_removes_long_silence_and_maps_time_back():
+    sr = 16000
+    tone = (np.sin(np.arange(sr * 2) / 5) * 0.1).astype("float32")
+    audio = np.zeros(sr * 30, dtype="float32")
+    audio[sr * 1: sr * 3] = tone          # ucapan 1-3 s
+    audio[sr * 20: sr * 22] = tone        # ucapan 20-22 s, setelah hening 17 detik
+    noise = np.random.default_rng(0).normal(0, 0.0008, len(audio)).astype("float32")  # derau ruangan
+    audio += noise
+    spans = speech_spans(audio)
+    assert len(spans) == 2
+    condensed = Condensed(audio)
+    assert 4.5 < condensed.seconds < 6  # 30 detik -> +-5 detik
+    # Detik ke-0,3 audio ringkas = awal ucapan pertama; detik setelah jeda = awal ucapan kedua (20 s asli).
+    assert condensed.original_time(0.3) == pytest.approx(1.0, abs=0.15)
+    second_start = condensed.map[1][0]
+    assert condensed.original_time(second_start + 0.3) == pytest.approx(20.0, abs=0.15)
+
+
+def test_condensed_keeps_continuous_speech_and_drops_digital_silence():
+    sr = 16000
+    continuous = (np.sin(np.arange(sr * 10) / 5) * 0.1).astype("float32")
+    assert Condensed(continuous).seconds == pytest.approx(10, abs=0.1)
+    assert Condensed(np.zeros(sr * 10, dtype="float32")).seconds == 0
+
+
+def test_resolve_model_auto_depends_on_mac(monkeypatch):
+    import meeting_notes.transcriber as tr
+
+    assert resolve_model("large-v3-turbo") == "large-v3-turbo"
+    monkeypatch.setattr(tr, "is_apple_silicon", lambda: True)
+    monkeypatch.setattr(tr, "physical_ram_gb", lambda: 16.0)
+    assert resolve_model("auto") == "large-v3"
+    monkeypatch.setattr(tr, "physical_ram_gb", lambda: 8.0)
+    assert resolve_model("auto") == "large-v3-turbo"
+    monkeypatch.setattr(tr, "is_apple_silicon", lambda: False)
+    monkeypatch.setattr(tr, "physical_ram_gb", lambda: 64.0)
+    assert resolve_model("auto") == "large-v3-turbo"
+
+
+class ChunkTranscriber:
+    """Mencatat potongan yang ditranskripsi; satu segmen per potongan pada detik awalnya."""
+
+    vocabulary = ""
+    model_size = "large-v3-turbo"
+
+    def __init__(self):
+        self.chunks = []
+
+    def transcribe_chunk(self, chunk, offset=0.0):
+        self.chunks.append((offset, len(chunk) / 16000))
+        return [Segment(offset, offset + 1, f"potongan di {offset:.0f}")]
+
+    def transcribe(self, audio, on_progress=None, offset=0.0):
+        segments = self.transcribe_chunk(audio, offset) if len(audio) else []
+        if on_progress:
+            on_progress(1.0)
+        return segments
+
+
+def _speech(seconds):
+    return (np.sin(np.arange(int(16000 * seconds)) / 5) * 0.1).astype("float32")
+
+
+def test_growing_wav_reads_file_still_being_written(tmp_path):
+    from meeting_notes.incremental import GrowingWav
+
+    path = tmp_path / "mic.wav"
+    sf.write(path, _speech(3), 16000, subtype="PCM_16")
+    with path.open("r+b") as f:  # header seperti saat aplikasi masih menulis: ukuran data belum diperbarui
+        f.seek(4)
+        f.write(b"\0\0\0\0")
+        f.seek(40)
+        f.write(b"\0\0\0\0")
+    reader = GrowingWav(path)
+    assert reader.samples() == 48000
+    np.testing.assert_allclose(reader.read(16000, 16010), _speech(3)[16000:16010], atol=1e-4)
+
+
+def test_background_transcription_then_process_only_transcribes_the_rest(tmp_path, monkeypatch):
+    from meeting_notes import incremental
+
+    _no_api_key(monkeypatch)
+    monkeypatch.setattr(summarizer_module, "find_claude_cli", lambda: None)
+    minutes = 7
+    for name in ("meeting.wav", "sistem.wav", "mic.wav"):
+        sf.write(tmp_path / name, _speech(60 * minutes), 16000, subtype="PCM_16")
+
+    background = ChunkTranscriber()
+    state = incremental.load_state(tmp_path)
+    for name, file in incremental.TRACKS.items():
+        incremental.advance(tmp_path, state, background, name, incremental.GrowingWav(tmp_path / file))
+    # 7 menit = potongan 2 menit lengkap; potongan terakhir (belum tentu lengkap saat rapat berjalan) ditunda.
+    saved = incremental.load_state(tmp_path)
+    assert 200 < saved["sistem"]["until"] < 7 * 60
+    assert len(background.chunks) == 2 * len(saved["sistem"]["segments"])
+
+    final = ChunkTranscriber()
+    result = process_recording(tmp_path / "meeting.wav", Settings(output_dir=tmp_path / "out"),
+                               INFO.started_at, lambda _: None, final)
+    # Saat rapat selesai hanya sisa audio yang ditranskripsi, satu kali per jalur.
+    assert [round(offset) for offset, _ in final.chunks] == [round(saved["sistem"]["until"])] * 2
+    assert all(seconds < 3 * 60 for _, seconds in final.chunks)
+    md = result.markdown_path.read_text(encoding="utf-8")
+    assert "potongan di 0" in md and f"potongan di {saved['sistem']['until']:.0f}" in md

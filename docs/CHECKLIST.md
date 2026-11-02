@@ -108,7 +108,13 @@ Server tidak punya Swift/macOS, jadi semua butir di bawah ⚠️ sampai berhasil
   "Peserta online", gema speaker dibuang (Python teruji; Swift menunggu QA di Mac)
 - ⚠️ **2.2.0** Mode akurat (Whisper large-v3) di pulau/menu bar dan `proses --akurat` (menunggu QA di Mac);
   istilah bundling, fetch, UI/UX, kata kerja ber-awalan di-/nge- (☑️ teruji dengan Claude sungguhan)
-- ⬜ **2.3.0** Perpustakaan rapat: riwayat semua rapat, pencarian, dan "Tanya ke rapat"
-- ⬜ **2.4.0** Label pembicara per orang untuk peserta online (Whisper lokal); sudah ada di mesin cloud sejak 1.2.0
+- ⚠️ **2.3.0** Optimasi tanpa perlu memilih mode:
+  - ☑️ MoM via Claude Code Sonnet + effort medium: rapat 1 jam ±25 detik (sebelumnya ±4 menit), kualitas dan
+    koreksi istilah sama (teruji dengan Claude sungguhan)
+  - ☑️ Hening dipangkas sebelum Whisper; model dipilih otomatis (large-v3 bila Apple Silicon RAM ≥ 16 GB)
+  - ⚠️ Transkripsi di latar belakang selama rapat (`ikuti`), sehingga setelah rapat hanya sisa ±2 menit yang
+    ditranskripsi (Python teruji; app Mac menunggu QA)
+- ⬜ **2.4.0** Perpustakaan rapat: riwayat semua rapat, pencarian, dan "Tanya ke rapat"
+- ⬜ **2.5.0** Label pembicara per orang untuk peserta online (Whisper lokal); sudah ada di mesin cloud sejak 1.2.0
 
 Dibatalkan atas permintaan: integrasi kalender, deteksi rapat otomatis, dan bagikan ke Slack/Notion/email.

@@ -169,10 +169,11 @@ def _build_input(transcript: str, glossary: list[str], marks: list[float] = ()) 
 
 
 class ClaudeCodeSummarizer:
-    def __init__(self, executable: str, model: str | None = None, timeout: int = 1800):
+    def __init__(self, executable: str, model: str | None = None, timeout: int = 1800, effort: str | None = None):
         self.executable = executable
         self.model = model
         self.timeout = timeout
+        self.effort = effort
 
     def summarize(self, transcript: str, glossary: list[str] = (), marks: list[float] = ()) -> MeetingSummary:
         cmd = [
@@ -187,10 +188,17 @@ class ClaudeCodeSummarizer:
             cmd += ["--model", self.model]
         # Tanpa API key di environment, Claude Code memakai login langganan (claude.ai).
         env = {k: v for k, v in os.environ.items() if k not in {"ANTHROPIC_API_KEY", "ANTHROPIC_AUTH_TOKEN"}}
-        proc = subprocess.run(
-            cmd, input=_build_input(transcript, list(glossary), list(marks)), capture_output=True, text=True,
-            timeout=self.timeout, env=env, cwd=tempfile.gettempdir(),
-        )
+        prompt = _build_input(transcript, list(glossary), list(marks))
+
+        def run(args: list[str]) -> subprocess.CompletedProcess:
+            return subprocess.run(
+                args, input=prompt, capture_output=True, text=True, timeout=self.timeout, env=env,
+                cwd=tempfile.gettempdir(),
+            )
+
+        proc = run(cmd + (["--effort", self.effort] if self.effort else []))
+        if self.effort and "--effort" in proc.stderr and not proc.stdout.strip():
+            proc = run(cmd)  # Claude Code versi lama belum mengenal --effort
         try:
             data = json.loads(proc.stdout)
         except json.JSONDecodeError:
@@ -217,7 +225,7 @@ def make_summarizer(settings: Settings) -> tuple[Summarizer | ClaudeCodeSummariz
         return Summarizer(settings.claude_model), None
     cli = find_claude_cli()
     if cli:
-        return ClaudeCodeSummarizer(cli, settings.claude_code_model), None
+        return ClaudeCodeSummarizer(cli, settings.claude_code_model, effort=settings.claude_code_effort), None
     return None, (
         "Claude Code belum terpasang, jadi hanya transkrip yang disimpan. "
         "Pasang Claude Code dan login dengan akun Claude Pro untuk ringkasan otomatis."

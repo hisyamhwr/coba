@@ -8,10 +8,6 @@ from dotenv import load_dotenv
 
 load_dotenv()
 
-# "Mode akurat": large-v3 penuh (32 lapis decoder, turbo hanya 4) lebih tahan terhadap bicara cepat dan
-# belibet, dengan biaya +-3x lebih lambat dan unduhan model +-3 GB sekali.
-ACCURATE_MODEL = "large-v3"
-
 
 def _env_bool(name: str, default: bool) -> bool:
     value = os.getenv(name)
@@ -22,9 +18,10 @@ def _env_bool(name: str, default: bool) -> bool:
 
 @dataclass
 class Settings:
-    # Whisper: tiny, base, small, medium, large-v3, large-v3-turbo.
-    # "large-v3-turbo" hampir seakurat large-v3 tetapi jauh lebih ringan (+-1,6 GB), cocok untuk RAM 8 GB.
-    whisper_model: str = field(default_factory=lambda: os.getenv("WHISPER_MODEL", "large-v3-turbo"))
+    # Whisper: auto, tiny, base, small, medium, large-v3, large-v3-turbo.
+    # "auto": large-v3 (paling akurat untuk bicara cepat) di Mac Apple Silicon dengan RAM >= 16 GB, selain itu
+    # large-v3-turbo (+-1,6 GB, cocok untuk RAM 8 GB). Lihat transcriber.resolve_model.
+    whisper_model: str = field(default_factory=lambda: os.getenv("WHISPER_MODEL") or "auto")
     # Mesin transkripsi: lokal (Whisper di laptop, gratis) atau cloud: elevenlabs, assemblyai, deepgram.
     # Mesin cloud butuh API key-nya di .env; jika gagal, otomatis kembali ke Whisper lokal.
     transcription_engine: str = field(
@@ -43,7 +40,11 @@ class Settings:
     summarizer: str = field(default_factory=lambda: os.getenv("SUMMARIZER", "auto").strip().lower())
     claude_model: str = field(default_factory=lambda: os.getenv("CLAUDE_MODEL", "claude-opus-5-5"))
     # Model untuk mode Claude Code, mis. "sonnet" atau "opus". Kosong = default akunmu.
-    claude_code_model: str | None = field(default_factory=lambda: os.getenv("CLAUDE_CODE_MODEL") or None)
+    # Sonnet dengan effort medium: diuji pada transkrip 1 jam, MoM jadi dalam +-25 detik (pengaturan bawaan
+    # Claude Code +-4 menit) dengan agenda, action item, dan koreksi istilah yang sama lengkapnya.
+    claude_code_model: str = field(default_factory=lambda: os.getenv("CLAUDE_CODE_MODEL") or "sonnet")
+    claude_code_effort: str = field(
+        default_factory=lambda: os.getenv("CLAUDE_CODE_EFFORT") or "medium")
     output_dir: Path = field(
         default_factory=lambda: Path(os.getenv("OUTPUT_DIR", "~/MeetingNotes")).expanduser()
     )

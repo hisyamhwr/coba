@@ -19,6 +19,7 @@ pesan galat/screenshot di langkah pertama yang gagal. Bug diperbaiki sebagai 2.0
 | 7d | (Temuan 2.0.9) Transkrip live tidak muncul; audio meeting tidak terekam saat memakai headset | 2.0.10: error transkrip live ditampilkan + coba ulang; audio meeting dipasang ulang otomatis; garis waktu level per 10 detik di `rekaman.log` |
 | 7e | (Temuan 2.0.10) Istilah developer salah tangkap: "legging" (flagging), FE, DS | 2.1.0: kamus & prompt developer, koreksi singkatan dieja; rekaman dua jalur. Cek: folder rekaman berisi `mic.wav` + `sistem.wav`, transkrip berlabel "Saya (mic)" / "Peserta online" |
 | 7f | (Temuan 2.1.0) "dibanding" (di-bundling), UIUX, fetch, "direpost"; bicara cepat kurang akurat | 2.2.0: istilah + aturan awalan di-/nge-; **Mode akurat** (large-v3). Cek: centang Mode akurat, rapat dengan pembicara cepat, bandingkan dengan rapat sebelumnya |
+| 7g | (Temuan 2.2.0) Mode akurat 3x lebih lambat; MoM rapat > 1 jam terlalu lama | 2.3.0: transkripsi latar belakang + model otomatis + MoM via Sonnet. Cek: rapat ≥ 15 menit, folder rekaman berisi `transkrip_parsial.json` dan `ikuti.log`; MoM siap ±1 menit setelah Selesai |
 | 7 | Tunggu | Kartu "MoM siap" + notifikasi; **Buka MoM** membuka MoM (.md, atau .docx bila "Buat juga Word" dicentang) berisi "Momen Penting" |
 | 8 | Izinkan Screen & System Audio Recording, buka ulang app, putar video YouTube sambil merekam **dengan headphone** | Suara video ikut tertranskrip di MoM |
 | 9 | Meeting Zoom/Meet sungguhan ≥ 15 menit | Suara peserta lain dan suaramu tercatat; MoM per agenda |

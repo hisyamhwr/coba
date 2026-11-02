@@ -2,6 +2,32 @@
 
 Format versi: `MAYOR.FITUR.PERBAIKAN` (lihat [docs/ROADMAP.md](docs/ROADMAP.md)).
 
+## 2.3.0
+
+Optimasi: lebih akurat tanpa menunggu lebih lama, tanpa perlu memilih mode. Pilihan "Mode akurat" dari 2.2.0
+dihapus dari aplikasi.
+
+- **Transkripsi di latar belakang selama rapat.**
+  - Saat mulai merekam, aplikasi menjalankan `python -m meeting_notes ikuti`, yang mentranskripsi setiap
+    potongan ±2 menit begitu lengkap.
+  - Prosesnya berprioritas rendah agar Zoom/Teams tetap lancar.
+  - Setelah rapat selesai, hanya sisa ±2 menit terakhir yang perlu ditranskripsi, berapa pun panjang rapatnya.
+  - Hasil disimpan per potongan (`transkrip_parsial.json`), jadi aman bila proses terhenti.
+- **Model dipilih otomatis.**
+  - Mac Apple Silicon dengan RAM ≥ 16 GB memakai Whisper large-v3 penuh, yang paling akurat untuk bicara
+    cepat/belibet. Lambatnya tidak terasa karena berjalan selama rapat.
+  - Mac lain memakai large-v3-turbo.
+  - Bila Mac tidak sanggup mengejar rapat, otomatis turun ke turbo.
+  - Proses ulang rekaman panjang (> 10 menit sisa) memakai turbo agar tetap cepat.
+  - Pertama kali, model large-v3 (±3 GB) diunduh di latar belakang saat rapat.
+- **Hening dipangkas sebelum Whisper.** Jeda > 1,5 detik dibuang dan waktu dipetakan kembali, sehingga
+  transkripsi lebih cepat (terutama jalur mic saat kamu lebih banyak mendengarkan) dan halusinasi berkurang.
+- **MoM jauh lebih cepat.**
+  - Claude Code memakai Sonnet dengan effort medium.
+  - Diuji pada transkrip 1 jam (±10.000 kata): ±25 detik, sebelumnya ±4 menit.
+  - Agenda, action item, dan semua uji koreksi istilah developer tetap benar.
+  - Bisa diubah lewat `CLAUDE_CODE_MODEL` / `CLAUDE_CODE_EFFORT` di `.env`.
+
 ## 2.2.0
 
 - **Mode akurat** untuk pembicara yang cepat atau belibet:

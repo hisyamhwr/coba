@@ -9,6 +9,7 @@ final class MeetingController {
     private var capture: AudioCapture?
     private var live: LiveTranscriber?
     private var processor: Processor?
+    private var worker: LiveWorker?
     private var timer: Timer?
     private var startedAt = Date()
 
@@ -87,6 +88,9 @@ final class MeetingController {
             self.state.phase = .recording
             self.state.expanded = true
             live?.start()
+            let worker = LiveWorker(folder: dir)
+            worker.start()
+            self.worker = worker
             self.timer = Timer.scheduledTimer(withTimeInterval: 1, repeats: true) { [weak self] _ in
                 Task { @MainActor in self?.tick() }
             }
@@ -118,6 +122,8 @@ final class MeetingController {
         timer = nil
         live?.stop()
         capture.stop()
+        worker?.stop()
+        worker = nil
         meter.level = 0
         self.capture = nil
         self.live = nil
@@ -150,7 +156,7 @@ final class MeetingController {
         self.processor = processor
         processor.run(
             audio: dir.appendingPathComponent("meeting.wav"), marks: marksURL, startedAt: startedAt,
-            docx: state.exportDocx, accurate: state.accurateMode,
+            docx: state.exportDocx,
             onStatus: { [weak self] message in
                 Task { @MainActor in self?.updateStep(message) }
             },

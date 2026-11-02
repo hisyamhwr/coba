@@ -21,6 +21,13 @@ CUT_SEARCH_SECONDS = 20
 SILENCE_RMS = 1e-3
 # Tingkat suara (lihat speech_level) minimum agar sebuah jalur rekaman dianggap berisi ucapan.
 SPEECH_LEVEL = 3e-3
+# Model Whisper. "auto" memilih large-v3 penuh (lebih akurat untuk bicara cepat/belibet) bila Mac kuat, karena
+# transkripsi berjalan di latar belakang selama rapat sehingga lambatnya tidak terasa; selain itu turbo.
+FAST_MODEL = "large-v3-turbo"
+ACCURATE_MODEL = "large-v3"
+ACCURATE_MIN_RAM_GB = 16
+# Jeda hening yang lebih panjang dari ini dipangkas sebelum ditranskripsi.
+MAX_PAUSE_SECONDS = 1.5
 # Label jalur rekaman terpisah dari aplikasi Mac.
 MIC_LABEL = "Saya (mic)"
 SYSTEM_LABEL = "Peserta online"
@@ -175,6 +182,85 @@ def merge_tracks(system: list[Segment], mic: list[Segment]) -> list[Segment]:
     return sorted(system + kept, key=lambda s: s.start)
 
 
+def speech_spans(audio: np.ndarray, sr: int = SAMPLE_RATE, max_pause: float = MAX_PAUSE_SECONDS,
+                 pad: float = 0.3) -> list[tuple[int, int]]:
+    """Rentang sampel yang berisi suara; jeda pendek (<= max_pause) tetap disertakan agar kalimat utuh.
+
+    Ambang mengikuti derau latar rekaman itu sendiri (2x derau ruangan), sehingga mic yang berisik maupun
+    audio meeting digital yang hening total sama-sama tertangani. Ambang dibatasi 30% dari bagian terkeras
+    agar orang yang bicara tanpa jeda (derau latar = suaranya sendiri) tidak ikut terpangkas.
+    """
+    frame = sr // 10
+    n = len(audio) // frame
+    if n == 0:
+        return []
+    rms = np.sqrt((audio[: n * frame].reshape(-1, frame) ** 2).mean(axis=1))
+    floor, loud = np.percentile(rms, [20, 95])
+    threshold = max(1.5e-3, min(float(floor) * 2, float(loud) * 0.3))
+    active = np.flatnonzero(rms >= threshold)
+    if active.size == 0:
+        return []
+    spans: list[list[int]] = []
+    gap_frames = int(max_pause * 10)
+    for i in active:
+        if spans and i - spans[-1][1] <= gap_frames:
+            spans[-1][1] = i
+        else:
+            spans.append([i, i])
+    pad_samples = int(pad * sr)
+    return [(max(0, a * frame - pad_samples), min(len(audio), (b + 1) * frame + pad_samples)) for a, b in spans]
+
+
+class Condensed:
+    """Audio dengan jeda hening panjang dipangkas, beserta peta waktu kembali ke rekaman asli.
+
+    Whisper bekerja per jendela 30 detik; hening tidak perlu ditranskripsi. Memangkasnya mempercepat
+    transkripsi (terutama jalur mic saat pengguna lebih banyak mendengarkan) dan mencegah halusinasi.
+    """
+
+    GAP = 0.2  # detik hening pemisah antar-potongan agar kata tidak menempel
+
+    def __init__(self, audio: np.ndarray, sr: int = SAMPLE_RATE):
+        self.sr = sr
+        self.map: list[tuple[float, float, float]] = []  # (mulai di audio ringkas, mulai asli, durasi)
+        parts, position = [], 0.0
+        silence = np.zeros(int(self.GAP * sr), dtype=np.float32)
+        for start, end in speech_spans(audio, sr):
+            if parts:
+                parts.append(silence)
+                position += self.GAP
+            parts.append(audio[start:end])
+            self.map.append((position, start / sr, (end - start) / sr))
+            position += (end - start) / sr
+        self.audio = np.concatenate(parts).astype(np.float32) if parts else np.zeros(0, dtype=np.float32)
+
+    @property
+    def seconds(self) -> float:
+        return len(self.audio) / self.sr
+
+    def original_time(self, t: float) -> float:
+        for cond_start, orig_start, duration in reversed(self.map):
+            if t >= cond_start:
+                return orig_start + min(t - cond_start, duration)
+        return self.map[0][1] if self.map else t
+
+
+def physical_ram_gb() -> float:
+    try:
+        import os
+
+        return os.sysconf("SC_PAGE_SIZE") * os.sysconf("SC_PHYS_PAGES") / 1024**3
+    except (ValueError, OSError, AttributeError):
+        return 0.0
+
+
+def resolve_model(name: str) -> str:
+    """'auto' -> large-v3 di Mac Apple Silicon dengan RAM >= 16 GB, selain itu large-v3-turbo."""
+    if name != "auto":
+        return name
+    return ACCURATE_MODEL if is_apple_silicon() and physical_ram_gb() >= ACCURATE_MIN_RAM_GB else FAST_MODEL
+
+
 def chunk_bounds(audio: np.ndarray, sr: int = SAMPLE_RATE, chunk_seconds: int = CHUNK_SECONDS,
                  search_seconds: int = CUT_SEARCH_SECONDS) -> list[tuple[int, int]]:
     """Bagi audio menjadi potongan +-chunk_seconds, dipotong di bagian paling sunyi."""
@@ -253,14 +339,22 @@ class _MlxEngine:
 
 class Transcriber:
     def __init__(
-        self, model_size: str = "large-v3-turbo", language: str | None = "id", engine: str = "auto",
+        self, model_size: str = "auto", language: str | None = "id", engine: str = "auto",
         chunk_seconds: int = CHUNK_SECONDS,
     ):
         self.chunk_seconds = chunk_seconds
+        self.language = language
         # Istilah dari kamus otomatis, dipakai sebagai petunjuk ejaan untuk Whisper.
         self.vocabulary = ""
-        use_mlx = engine == "mlx" or (engine == "auto" and is_apple_silicon())
-        self.engine = (_MlxEngine if use_mlx else _FasterWhisperEngine)(model_size, language)
+        self.use_mlx = engine == "mlx" or (engine == "auto" and is_apple_silicon())
+        self.model_size = ""
+        self.use_model(resolve_model(model_size))
+
+    def use_model(self, model_size: str) -> None:
+        """Ganti model (mis. turun ke turbo bila Mac tidak mampu mengejar rapat yang sedang berjalan)."""
+        if model_size != self.model_size:
+            self.model_size = model_size
+            self.engine = (_MlxEngine if self.use_mlx else _FasterWhisperEngine)(model_size, self.language)
 
     def download(self) -> None:
         """Unduh model (sekali saja) tanpa memuatnya ke memori."""
@@ -274,17 +368,22 @@ class Transcriber:
         terms = ", ".join(reversed(self.vocabulary.split(", ")))
         return f"Istilah: {terms}. {BASE_PROMPT}"
 
-    def transcribe(self, audio: np.ndarray, on_progress: Callable[[float], None] | None = None) -> list[Segment]:
+    def transcribe_chunk(self, chunk: np.ndarray, offset: float = 0.0) -> list[Segment]:
+        """Transkripsi satu potongan (tanpa membersihkan); waktu dihitung dari awal rekaman."""
+        condensed = Condensed(chunk)
+        if condensed.seconds < 0.5:
+            return []
+        return [
+            Segment(condensed.original_time(s.start) + offset, condensed.original_time(s.end) + offset, s.text)
+            for s in self.engine.transcribe(normalize_loudness(condensed.audio), self.prompt())
+        ]
+
+    def transcribe(self, audio: np.ndarray, on_progress: Callable[[float], None] | None = None,
+                   offset: float = 0.0) -> list[Segment]:
         bounds = chunk_bounds(audio, chunk_seconds=self.chunk_seconds)
         segments: list[Segment] = []
         for i, (start, end) in enumerate(bounds):
-            chunk = audio[start:end]
-            if chunk.size and float(np.sqrt(np.mean(chunk**2))) >= SILENCE_RMS:
-                offset = start / SAMPLE_RATE
-                segments += [
-                    Segment(s.start + offset, s.end + offset, s.text)
-                    for s in self.engine.transcribe(normalize_loudness(chunk), self.prompt())
-                ]
+            segments += self.transcribe_chunk(audio[start:end], offset + start / SAMPLE_RATE)
             if on_progress:
                 on_progress((i + 1) / len(bounds))
         return clean_segments(segments)

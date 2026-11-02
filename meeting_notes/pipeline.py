@@ -11,14 +11,16 @@ import numpy as np
 import soundfile as sf
 
 from .cloud_stt import PROVIDERS, transcribe_with_fallback
-from .config import ACCURATE_MODEL, Settings
+from .config import Settings
 from .exporter import MeetingInfo, render_markdown, write_docx
 from .glossary import Glossary, apply_corrections
+from .incremental import TRACKS, load_state, track_segments
 from .summarizer import make_summarizer
 from .transcriber import (
+    ACCURATE_MODEL,
+    FAST_MODEL,
     MIC_LABEL,
     SAMPLE_RATE,
-    SPEECH_LEVEL,
     SYSTEM_LABEL,
     Segment,
     Transcriber,
@@ -27,13 +29,12 @@ from .transcriber import (
     load_audio,
     merge_tracks,
     segments_to_text,
-    speech_level,
     to_paragraphs,
 )
 
-# Aplikasi Mac menyimpan jalur terpisah di samping meeting.wav (campuran).
-MIC_TRACK = "mic.wav"
-SYSTEM_TRACK = "sistem.wav"
+# Sisa audio (semua jalur) yang belum ditranskripsi di latar belakang. Bila lebih dari ini (mis. proses ulang
+# rekaman lama), pakai turbo agar MoM tetap cepat jadi.
+MAX_ACCURATE_BACKLOG_SECONDS = 600
 
 
 @dataclass
@@ -50,23 +51,51 @@ def _slug(text: str) -> str:
     return re.sub(r"[^\w]+", "-", text.lower()).strip("-")[:50] or "rapat"
 
 
-def load_tracks(audio_path: Path) -> tuple[np.ndarray, np.ndarray] | None:
-    """Jalur meeting dan mic dari aplikasi Mac, bila keduanya ada."""
-    system, mic = audio_path.with_name(SYSTEM_TRACK), audio_path.with_name(MIC_TRACK)
-    if not (system.exists() and mic.exists()):
+def transcribe_tracks(folder: Path, transcriber: Transcriber, on_status: Callable[[str], None]) -> list[Segment] | None:
+    """Transkripsi jalur meeting dan mic dari aplikasi Mac, melanjutkan hasil transkripsi latar belakang.
+
+    Tiap jalur ditranskripsi terpisah: suara meeting yang digital tidak tercampur derau ruangan dari mic, suara
+    sendiri yang pelan dikuatkan tersendiri, dan transkrip berlabel "Saya (mic)" / "Peserta online".
+    """
+    paths = {name: folder / file for name, file in TRACKS.items()}
+    if not all(path.exists() for path in paths.values()):
         return None
-    return load_audio(system), load_audio(mic)
+    state = load_state(folder)
+    work = {}
+    for name, path in paths.items():
+        until, segments = track_segments(state, name)
+        work[name] = (load_audio(path)[int(until * SAMPLE_RATE):], until, segments)
+    backlog = sum(len(rest) for rest, _, _ in work.values()) / SAMPLE_RATE
+    if backlog > MAX_ACCURATE_BACKLOG_SECONDS and transcriber.model_size == ACCURATE_MODEL:
+        transcriber.use_model(FAST_MODEL)
+    total, done, results = max(backlog, 1.0), 0.0, {}
+    for name, (rest, until, segments) in work.items():
+        label = "suara meeting" if name == "sistem" else "suaramu (mic)"
+        seconds = len(rest) / SAMPLE_RATE
+
+        def progress(p: float, label=label, base=done, seconds=seconds) -> None:
+            on_status(f"Mentranskrip {label}... {(base + p * seconds) / total:.0%}")
+
+        new = transcriber.transcribe(rest, progress, offset=until) if seconds >= 1 else []
+        done += seconds
+        results[name] = clean_segments(segments + new)
+    system, mic = results["sistem"], results["mic"]
+    if system and mic:
+        return merge_tracks(
+            [Segment(s.start, s.end, s.text, SYSTEM_LABEL) for s in system],
+            [Segment(s.start, s.end, s.text, MIC_LABEL) for s in mic],
+        )
+    # Hanya satu jalur bersuara (mis. rapat offline: hanya mic): tanpa label.
+    return system or mic
 
 
 def transcribe(
     audio: np.ndarray, settings: Settings, glossary: Glossary, transcriber: Transcriber | None,
-    on_status: Callable[[str], None], tracks: tuple[np.ndarray, np.ndarray] | None = None,
+    on_status: Callable[[str], None], folder: Path | None = None,
 ) -> tuple[list[Segment], str | None]:
     """Transkripsi dengan mesin pilihan; jika mesin cloud tidak tersedia/gagal, kembali ke Whisper lokal.
 
-    tracks: (jalur meeting, jalur mic). Bila keduanya berisi ucapan, Whisper lokal mentranskripsi masing-masing
-    jalur terpisah: suara meeting yang digital tidak tercampur derau ruangan dari mic, suara sendiri yang pelan
-    dikuatkan tersendiri, dan transkrip berlabel "Saya (mic)" / "Peserta online".
+    folder: folder rekaman aplikasi Mac; bila berisi jalur terpisah, Whisper lokal memakai transcribe_tracks.
     """
     note = None
     engine = settings.transcription_engine
@@ -88,22 +117,15 @@ def transcribe(
             except Exception as exc:  # noqa: BLE001 - rapat tetap tercatat dengan Whisper lokal
                 note = f"{provider.name} gagal ({str(exc)[:150]}), memakai Whisper lokal."
 
-    if settings.whisper_model == ACCURATE_MODEL:
-        on_status("Mentranskrip mode akurat (pertama kali mengunduh model +-3 GB)...")
-    else:
-        on_status("Mentranskrip audio (lokal)...")
+    on_status("Mentranskrip audio (lokal)...")
     transcriber = transcriber or Transcriber(settings.whisper_model, settings.language, settings.whisper_engine)
     transcriber.vocabulary = glossary.whisper_hint()
-    if tracks and all(speech_level(track) >= SPEECH_LEVEL for track in tracks):
-        system, mic = tracks
-        system_segments = transcriber.transcribe(
-            system, lambda p: on_status(f"Mentranskrip suara meeting... {p / 2:.0%}"))
-        mic_segments = transcriber.transcribe(
-            mic, lambda p: on_status(f"Mentranskrip suaramu (mic)... {0.5 + p / 2:.0%}"))
-        return merge_tracks(
-            [Segment(s.start, s.end, s.text, SYSTEM_LABEL) for s in system_segments],
-            [Segment(s.start, s.end, s.text, MIC_LABEL) for s in mic_segments],
-        ), note
+    if folder is not None:
+        segments = transcribe_tracks(folder, transcriber, on_status)
+        if segments is not None:
+            return segments, note
+    if len(audio) / SAMPLE_RATE > MAX_ACCURATE_BACKLOG_SECONDS and transcriber.model_size == ACCURATE_MODEL:
+        transcriber.use_model(FAST_MODEL)
     return transcriber.transcribe(audio, lambda p: on_status(f"Mentranskrip... {p:.0%}")), note
 
 
@@ -121,7 +143,7 @@ def process_recording(
     audio = load_audio(audio_path)
     info = MeetingInfo(started_at=started_at, duration_seconds=len(audio) / SAMPLE_RATE)
 
-    segments, engine_note = transcribe(audio, settings, glossary, transcriber, on_status, load_tracks(audio_path))
+    segments, engine_note = transcribe(audio, settings, glossary, transcriber, on_status, audio_path.parent)
     paragraphs = to_paragraphs(segments)
 
     summary, note, corrections = None, None, {}

@@ -20,6 +20,12 @@ if ! "$PYTHON" -c 'import soundfile, faster_whisper, docx, dotenv, pydantic, ant
     echo "Memasang library Python yang belum ada ke $PYTHON ..."
     "$PYTHON" -m pip install -r "$REPO/requirements.txt"
 fi
+# .env lama (disalin dari contoh sebelum 2.3.0) mengunci WHISPER_MODEL=large-v3-turbo; ganti ke pemilihan
+# otomatis. Pilihan lain yang diisi sendiri tidak diubah.
+if [ -f "$REPO/.env" ] && grep -qx 'WHISPER_MODEL=large-v3-turbo' "$REPO/.env"; then
+    sed -i '' 's/^WHISPER_MODEL=large-v3-turbo$/WHISPER_MODEL=auto/' "$REPO/.env"
+    echo "WHISPER_MODEL di .env diubah ke auto (model dipilih otomatis sesuai Mac)."
+fi
 "$PYTHON" -c 'import mlx_whisper' 2>/dev/null || echo "Peringatan: mlx-whisper belum terpasang."
 
 echo "Membangun Meeting Notes v$VERSION"
