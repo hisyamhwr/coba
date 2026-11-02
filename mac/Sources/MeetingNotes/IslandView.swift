@@ -1,17 +1,20 @@
 import AppKit
 import SwiftUI
 
-/// Token desain pulau (lihat docs/DESIGN.md). Gaya: "AI-native dark", modern dan ceria. Permukaan hitam pekat
-/// agar menyatu dengan notch, satu warna aksen per status supaya status terbaca sekilas, dan gradien hangat
-/// pink-oranye-kuning sebagai identitas.
+/// Token desain pulau (lihat docs/DESIGN.md). Gaya: "neon ocean" — permukaan hitam pekat agar menyatu dengan
+/// notch, identitas biru elektrik → cyan → tosca, hijau mint untuk selesai, lime sebagai aksen kontras (Penting),
+/// dan merah koral khusus untuk rekam/stop/peringatan.
 private enum Palette {
-    static let red = Color(red: 1.0, green: 0.27, blue: 0.23)      // #FF453A merekam
-    static let orange = Color(red: 1.0, green: 0.62, blue: 0.04)   // #FF9F0A penting, peringatan
-    static let yellow = Color(red: 1.0, green: 0.84, blue: 0.04)   // #FFD60A
-    static let green = Color(red: 0.19, green: 0.82, blue: 0.35)   // #30D158 selesai
-    static let mint = Color(red: 0.4, green: 0.83, blue: 0.81)     // #66D4CF
-    static let blue = Color(red: 0.04, green: 0.52, blue: 1.0)     // #0A84FF Word, tugas
-    static let pink = Color(red: 1.0, green: 0.22, blue: 0.56)     // #FF375F
+    static let red = Color(red: 1.0, green: 0.30, blue: 0.43)      // #FF4D6D titik rekam, tombol stop
+    static let coral = Color(red: 1.0, green: 0.48, blue: 0.54)    // #FF7A8A peringatan, gagal
+    static let azure = Color(red: 0.15, green: 0.39, blue: 0.92)   // #2563EB biru tua (tombol)
+    static let blue = Color(red: 0.23, green: 0.51, blue: 0.96)    // #3B82F6 biru elektrik
+    static let deepCyan = Color(red: 0.03, green: 0.57, blue: 0.70) // #0891B2 cyan gelap (tombol, teks putih)
+    static let cyan = Color(red: 0.13, green: 0.83, blue: 0.93)    // #22D3EE cyan neon
+    static let teal = Color(red: 0.18, green: 0.83, blue: 0.75)    // #2DD4BF tosca
+    static let mint = Color(red: 0.20, green: 0.83, blue: 0.60)    // #34D399 hijau mint: selesai
+    static let lime = Color(red: 0.76, green: 0.96, blue: 0.24)    // #C3F53C aksen: momen penting
+    static let navy = Color(red: 0.04, green: 0.12, blue: 0.25)    // #0B1E3F ikon di atas gradien terang
     static let chip = Color.white.opacity(0.1)
     /// Garis tepi "kaca": terang di atas, memudar ke bawah. Memberi kesan timbul pada tombol & kartu (statis).
     static let rim = LinearGradient(colors: [Color.white.opacity(0.24), Color.white.opacity(0.04)],
@@ -21,16 +24,18 @@ private enum Palette {
     static let secondary = Color.white.opacity(0.72)               // teks transkrip yang sudah final
     static let muted = Color.white.opacity(0.55)                   // ±6:1 di atas hitam
 
-    static let record = LinearGradient(colors: [pink, red, orange], startPoint: .leading, endPoint: .trailing)
-    /// Memproses memakai warna identitas yang sama (hangat), bukan gradien biru-ungu yang terkesan generik.
-    static let process = LinearGradient(colors: [yellow, orange, pink], startPoint: .leading, endPoint: .trailing)
-    static let done = LinearGradient(colors: [green, mint], startPoint: .leading, endPoint: .trailing)
-    static let brand = LinearGradient(colors: [pink, orange, yellow], startPoint: .topLeading, endPoint: .bottomTrailing)
-    static let partial = LinearGradient(colors: [yellow, orange], startPoint: .leading, endPoint: .trailing)
+    /// Tombol aksi utama (Mulai, Susun ulang): biru tua → cyan gelap agar teks putih tetap kontras.
+    static let action = LinearGradient(colors: [azure, deepCyan], startPoint: .leading, endPoint: .trailing)
+    /// Tombol stop: merah koral.
+    static let record = LinearGradient(colors: [red, coral], startPoint: .leading, endPoint: .trailing)
+    static let process = LinearGradient(colors: [blue, cyan, teal], startPoint: .leading, endPoint: .trailing)
+    static let done = LinearGradient(colors: [teal, mint], startPoint: .leading, endPoint: .trailing)
+    static let brand = LinearGradient(colors: [blue, cyan, teal], startPoint: .topLeading, endPoint: .bottomTrailing)
+    static let partial = LinearGradient(colors: [cyan, mint], startPoint: .leading, endPoint: .trailing)
     /// Warna konfeti saat MoM siap.
-    static let confetti: [Color] = [pink, orange, yellow, green, mint, red]
-    /// Warna per jalur suara: kuning = suara kita (mic), mint = peserta online (audio meeting).
-    static let micSource = yellow
+    static let confetti: [Color] = [blue, cyan, teal, mint, lime, Color.white]
+    /// Warna per jalur suara: cyan = suara kita (mic), mint = peserta online (audio meeting).
+    static let micSource = cyan
     static let meetingSource = mint
 }
 
@@ -154,19 +159,19 @@ struct IslandView: View {
     private var glow: some View {
         switch state.phase {
         case .idle:
-            Glow(color: Palette.pink, strength: state.expanded ? 0.35 : (hovering ? 0.25 : 0))
+            Glow(color: Palette.cyan, strength: state.expanded ? 0.3 : (hovering ? 0.22 : 0))
         case .recording:
             if state.expanded {
                 LevelGlow(audio: meter.audio)
             } else {
-                Glow(color: Palette.red, strength: 0.22, center: .leading, radius: 130)
+                Glow(color: Palette.blue, strength: 0.3, center: .leading, radius: 130)
             }
         case .processing:
-            Glow(color: Palette.orange, strength: 0.38)
+            Glow(color: Palette.cyan, strength: 0.34)
         case .done:
-            Glow(color: Palette.green, strength: 0.4)
+            Glow(color: Palette.mint, strength: 0.36)
         case .failed:
-            Glow(color: Palette.orange, strength: 0.35)
+            Glow(color: Palette.coral, strength: 0.32)
         }
     }
 
@@ -271,7 +276,7 @@ struct IslandView: View {
             .padding(.leading, 10)
             .padding(.trailing, 14)
             .frame(height: 32)
-            .background(Capsule().fill(Palette.record))
+            .background(Capsule().fill(Palette.action))
             .overlay(Sheen().clipShape(Capsule()))
             .overlay(Capsule().strokeBorder(Palette.rim, lineWidth: 1))
             .background(PulseHalo())
@@ -311,7 +316,7 @@ struct IslandView: View {
             if !state.marks.isEmpty {
                 Label("\(state.marks.count)", systemImage: "star.fill")
                     .font(Typo.small)
-                    .foregroundStyle(Palette.orange)
+                    .foregroundStyle(Palette.lime)
                     .contentTransition(.numericText())
                     .transition(.scale.combined(with: .opacity))
             }
@@ -344,7 +349,7 @@ struct IslandView: View {
             if let warning = state.warning {
                 Label(warning, systemImage: "exclamationmark.triangle.fill")
                     .font(.system(size: 10, weight: .regular))
-                    .foregroundStyle(Palette.orange)
+                    .foregroundStyle(Palette.coral)
                     .lineLimit(2)
             }
             HStack(spacing: 8) {
@@ -355,19 +360,19 @@ struct IslandView: View {
                     HStack(spacing: 6) {
                         Image(systemName: state.marks.isEmpty ? "star" : "star.fill")
                             .symbolEffect(.bounce, value: state.marks.count)
-                            .background(Burst(trigger: state.marks.count, color: Palette.yellow))
+                            .background(Burst(trigger: state.marks.count, color: Palette.lime))
                         Text("Penting")
                         if !state.marks.isEmpty {
                             Text("\(state.marks.count)")
                                 .font(Typo.number(11))
                                 .contentTransition(.numericText())
                                 .padding(.horizontal, 6)
-                                .background(Capsule().fill(Palette.orange.opacity(0.3)))
+                                .background(Capsule().fill(Palette.lime.opacity(0.25)))
                                 .transition(.scale.combined(with: .opacity))
                         }
                     }
                     .font(Typo.label)
-                    .foregroundStyle(Palette.orange)
+                    .foregroundStyle(Palette.lime)
                     .padding(.horizontal, 12)
                     .frame(height: 30)
                     .background(Capsule().fill(Palette.chip))
@@ -452,10 +457,10 @@ struct IslandView: View {
                 if summarized {
                     CheckBadge()
                         .background(Confetti())
-                    Text("MoM siap").foregroundStyle(Palette.green)
+                    Text("MoM siap").foregroundStyle(Palette.mint)
                 } else {
-                    Image(systemName: "exclamationmark.triangle.fill").foregroundStyle(Palette.orange)
-                    Text("Transkrip tersimpan, MoM belum tersusun").foregroundStyle(Palette.orange)
+                    Image(systemName: "exclamationmark.triangle.fill").foregroundStyle(Palette.coral)
+                    Text("Transkrip tersimpan, MoM belum tersusun").foregroundStyle(Palette.coral)
                 }
                 Spacer()
                 iconButton("xmark", help: "Tutup") { controller.dismiss() }
@@ -474,10 +479,10 @@ struct IslandView: View {
             }
             HStack(spacing: 6) {
                 if summarized {
-                    stat(state.result?.decisions ?? 0, "keputusan", icon: "checkmark.seal.fill", color: Palette.green)
+                    stat(state.result?.decisions ?? 0, "keputusan", icon: "checkmark.seal.fill", color: Palette.mint)
                     stat(state.result?.action_items ?? 0, "tugas", icon: "checklist", color: Palette.blue)
                     if !state.marks.isEmpty {
-                        stat(state.marks.count, nil, icon: "star.fill", color: Palette.orange)
+                        stat(state.marks.count, nil, icon: "star.fill", color: Palette.lime)
                     }
                 }
                 Spacer()
@@ -494,7 +499,7 @@ struct IslandView: View {
                 if summarized {
                     primaryButton("Buka MoM", icon: "doc.text.fill", gradient: Palette.done) { controller.openResult() }
                 } else {
-                    primaryButton("Susun ulang", icon: "arrow.clockwise", gradient: Palette.record) {
+                    primaryButton("Susun ulang", icon: "arrow.clockwise", gradient: Palette.action) {
                         controller.retry()
                     }
                 }
@@ -512,7 +517,7 @@ struct IslandView: View {
                 iconButton("xmark", help: "Tutup") { controller.dismiss() }
             }
             .font(Typo.label)
-            .foregroundStyle(Palette.orange)
+            .foregroundStyle(Palette.coral)
             Text(state.errorMessage)
                 .font(.system(size: 12, weight: .regular))
                 .foregroundStyle(Palette.muted)
@@ -522,7 +527,7 @@ struct IslandView: View {
                 Spacer()
                 iconButton("folder", help: "Buka folder rekaman") { controller.openFolder() }
                 if state.recordingDir != nil {
-                    primaryButton("Proses ulang", icon: "arrow.clockwise", gradient: Palette.record) {
+                    primaryButton("Proses ulang", icon: "arrow.clockwise", gradient: Palette.action) {
                         controller.retry()
                     }
                 }
@@ -569,11 +574,11 @@ struct IslandView: View {
         } label: {
             Label(title, systemImage: on ? "checkmark.circle.fill" : icon)
                 .font(Typo.small)
-                .foregroundStyle(on ? Palette.yellow : Palette.muted)
+                .foregroundStyle(on ? Palette.cyan : Palette.muted)
                 .contentTransition(.symbolEffect(.replace))
                 .padding(.horizontal, 10)
                 .frame(height: 28)
-                .background(Capsule().fill(on ? Palette.yellow.opacity(0.16) : Palette.chip))
+                .background(Capsule().fill(on ? Palette.cyan.opacity(0.16) : Palette.chip))
                 .overlay(Capsule().strokeBorder(Palette.rim, lineWidth: 0.75))
         }
         .buttonStyle(PressableStyle())
@@ -664,7 +669,7 @@ struct IslandShape: Shape {
 
 // MARK: - Ikon
 
-/// Logo aplikasi: bola bergradien pink-oranye-kuning dengan gelombang suara. Statis (tanpa biaya animasi);
+/// Logo aplikasi: bola bergradien biru-cyan-tosca dengan gelombang suara. Statis (tanpa biaya animasi);
 /// saat disorot memantul, sedikit miring, dan gelombangnya "menyala" sekali.
 private struct BrandMark: View {
     let size: CGFloat
@@ -673,7 +678,7 @@ private struct BrandMark: View {
     var body: some View {
         Image(systemName: "waveform")
             .font(.system(size: size * 0.5, weight: .bold))
-            .foregroundStyle(.black.opacity(0.8))
+            .foregroundStyle(Palette.navy)
             .symbolEffect(.bounce, value: active)
             .frame(width: size, height: size)
             .background(Circle().fill(Palette.brand))
@@ -713,7 +718,7 @@ private struct PulseHalo: View {
 
     var body: some View {
         Capsule()
-            .fill(Palette.red.opacity(0.5))
+            .fill(Palette.blue.opacity(0.5))
             .scaleEffect(x: on ? 1.22 : 1, y: on ? 1.5 : 1)
             .opacity(on ? 0 : 0.7)
             .allowsHitTesting(false)
@@ -750,7 +755,7 @@ private struct CheckBadge: View {
     var body: some View {
         ZStack {
             Circle()
-                .stroke(Palette.green, lineWidth: 2)
+                .stroke(Palette.mint, lineWidth: 2)
                 .scaleEffect(drawn ? 2.2 : 1)
                 .opacity(drawn ? 0 : 0.8)
             Circle().fill(Palette.done)
@@ -889,12 +894,12 @@ private struct Glow: View {
     }
 }
 
-/// Cahaya merah-oranye yang menguat saat ada suara (lewat opacity, tanpa menggambar ulang gradien).
+/// Cahaya biru-cyan yang menguat saat ada suara (lewat opacity, tanpa menggambar ulang gradien).
 private struct LevelGlow: View {
     @ObservedObject var audio: AudioLevels
 
     var body: some View {
-        RadialGradient(colors: [Palette.red, Palette.orange.opacity(0.25), .clear],
+        RadialGradient(colors: [Palette.blue, Palette.cyan.opacity(0.25), .clear],
                        center: .top, startRadius: 0, endRadius: 260)
             .opacity(0.22 + Double(audio.level) * 0.45)
             .animation(.easeOut(duration: 0.18), value: audio.level)
@@ -902,7 +907,7 @@ private struct LevelGlow: View {
     }
 }
 
-/// Garis tepi bergradien kuning-oranye-pink saat Claude memproses ("AI sedang bekerja"). Gradiennya statis;
+/// Garis tepi bergradien biru-cyan-tosca-mint saat Claude memproses ("AI sedang bekerja"). Gradiennya statis;
 /// yang beranimasi hanya opacity lapisannya, sehingga GPU tidak perlu menggambar ulang gradien tiap frame.
 private struct Aura: View {
     let shape: IslandShape
@@ -911,7 +916,7 @@ private struct Aura: View {
 
     var body: some View {
         shape
-            .stroke(LinearGradient(colors: [Palette.yellow, Palette.orange, Palette.pink, Palette.red],
+            .stroke(LinearGradient(colors: [Palette.blue, Palette.cyan, Palette.teal, Palette.mint],
                                    startPoint: .leading, endPoint: .trailing), lineWidth: 1.5)
             .opacity(bright ? 1 : 0.45)
             .allowsHitTesting(false)
@@ -972,7 +977,7 @@ private struct ElapsedText: View {
 
 /// Transkrip live. Selalu menampilkan kata-kata TERBARU: teks lama dipotong di depan (bukan di belakang),
 /// sehingga ucapan terakhir tidak pernah terpotong di kanan. Kata yang masih dikenali (bisa berubah) tampil
-/// dengan gradien kuning-oranye, lalu berubah putih begitu final.
+/// dengan gradien cyan-mint, lalu berubah putih begitu final.
 private struct LiveText: View {
     @ObservedObject var caption: LiveCaption
 
@@ -1017,11 +1022,11 @@ private struct EqualizerBars: View {
     let height: CGFloat
 
     private static let bars: [LevelBars.Bar] = [
-        .init(id: 0, weight: 0.55, color: Palette.pink),
-        .init(id: 1, weight: 0.9, color: Palette.red),
-        .init(id: 2, weight: 1.0, color: Palette.orange),
-        .init(id: 3, weight: 0.8, color: Palette.yellow),
-        .init(id: 4, weight: 0.6, color: Palette.orange),
+        .init(id: 0, weight: 0.55, color: Palette.blue),
+        .init(id: 1, weight: 0.9, color: Palette.cyan),
+        .init(id: 2, weight: 1.0, color: Palette.teal),
+        .init(id: 3, weight: 0.8, color: Palette.mint),
+        .init(id: 4, weight: 0.6, color: Palette.cyan),
     ]
 
     var body: some View {

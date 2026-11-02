@@ -2,19 +2,23 @@
 
 Gaya: **AI-native dark** ala Dynamic Island, modern dan ceria. Permukaan hitam pekat menyatu dengan notch; setiap status punya
 satu warna aksen agar terbaca sekilas; satu elemen utama besar per status (timer, transkrip live, judul rapat).
-Satu identitas warna hangat (pink-oranye-kuning); gradien biru-ungu sengaja tidak dipakai karena terkesan
-generik ("AI slop", lihat skill `swiftui-design-skill`).
+Satu identitas warna biru-cyan-tosca (dipilih pengguna); ungu sengaja tidak dipakai agar tidak menjadi gradien
+biru-ungu yang terkesan generik ("AI slop", lihat skill `swiftui-design-skill`).
 
 ## Warna
 
+Tema **neon ocean**: identitas biru elektrik → cyan → tosca, hijau mint untuk selesai, lime sebagai aksen kontras,
+dan merah koral hanya untuk rekam/stop/peringatan (merah tetap tanda "sedang merekam" yang paling jelas).
+
 | Token | Hex | Dipakai untuk |
 |---|---|---|
-| `red` | `#FF453A` | Merekam, tombol stop |
-| `orange` | `#FF9F0A` | Momen penting, peringatan, gagal |
-| `green` / `mint` | `#30D158` / `#66D4CF` | MoM siap |
-| `blue` | `#0A84FF` | Centang Word, jumlah tugas (dipakai hemat) |
-| `pink` / `yellow` | `#FF375F` / `#FFD60A` | Logo & tombol Mulai (gradien `brand`: pink → orange → yellow), memproses (gradien `process`: yellow → orange → pink), kata live yang masih dikenali (yellow → orange) |
-| `micSource` / `meetingSource` | yellow / mint | Chip jalur suara saat merekam: suaramu (mic) dan peserta online |
+| `blue` / `cyan` / `teal` | `#3B82F6` / `#22D3EE` / `#2DD4BF` | Identitas (gradien `brand`), equalizer, cahaya rekam, memproses (`process`), garis tepi "bernapas" |
+| `azure` → `deepCyan` | `#2563EB` → `#0891B2` | Tombol aksi utama (`action`: Mulai, Susun ulang); cukup gelap untuk teks putih |
+| `mint` | `#34D399` | MoM siap (`done`: teal → mint), jalur suara peserta |
+| `lime` | `#C3F53C` | Aksen: momen Penting (bintang, jumlah, riak) |
+| `red` / `coral` | `#FF4D6D` / `#FF7A8A` | Titik rekam & tombol stop (`record`) / peringatan & gagal |
+| `navy` | `#0B1E3F` | Ikon di atas gradien terang (logo) |
+| kata live sementara | cyan → mint | Kata yang masih dikenali |
 | `muted` | putih 55% | Teks sekunder (kontras ±6:1 di atas hitam) |
 | `chip` | putih 10% | Latar tombol kapsul/ikon |
 | `rim` | putih 24% → 4% (atas → bawah) | Tepi "kaca" pada tombol, chip, dan kartu |

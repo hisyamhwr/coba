@@ -2,6 +2,15 @@
 
 Format versi: `MAYOR.FITUR.PERBAIKAN` (lihat [docs/ROADMAP.md](docs/ROADMAP.md)).
 
+## 3.3.1
+
+Palet baru **neon ocean** (tanpa oranye):
+- Identitas biru elektrik → cyan → tosca: logo, equalizer, cahaya rekam, status memproses.
+- Tombol Mulai dan Susun ulang: biru tua → cyan gelap (teks putih tetap kontras).
+- Hijau mint untuk MoM siap dan jalur suara peserta; cyan untuk jalur suaramu (mic) dan chip aktif.
+- Aksen lime untuk momen Penting.
+- Merah koral hanya untuk titik rekam, tombol stop, dan peringatan.
+
 ## 3.3.0
 
 Tampilan baru yang lebih ringkas, segar, dan tidak monoton:
