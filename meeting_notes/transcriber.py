@@ -307,7 +307,8 @@ def chunk_bounds(audio: np.ndarray, sr: int = SAMPLE_RATE, chunk_seconds: int = 
     return list(zip(starts, starts[1:] + [n], strict=True))
 
 
-def iter_chunks(reader, start: int = 0, chunk_seconds: int = CHUNK_SECONDS, include_last: bool = True):
+def iter_chunks(reader, start: int = 0, chunk_seconds: int = CHUNK_SECONDS, include_last: bool = True,
+                search_seconds: int = CUT_SEARCH_SECONDS):
     """Potongan +-chunk_seconds dari file WAV (wavio.GrowingWav), dipotong di titik paling sunyi.
 
     Membaca langsung dari file satu potongan per kali, sehingga rapat berjam-jam tidak dimuat utuh ke memori.
@@ -321,7 +322,7 @@ def iter_chunks(reader, start: int = 0, chunk_seconds: int = CHUNK_SECONDS, incl
         if pos >= total:
             return
         piece = reader.read(pos, min(total, pos + chunk + SAMPLE_RATE))
-        bounds = chunk_bounds(piece, chunk_seconds=chunk_seconds)
+        bounds = chunk_bounds(piece, chunk_seconds=chunk_seconds, search_seconds=search_seconds)
         last = len(bounds) == 1
         if last and not include_last:
             return
@@ -401,6 +402,7 @@ class Transcriber:
         self.language = language
         # Istilah dari kamus otomatis, dipakai sebagai petunjuk ejaan untuk Whisper.
         self.vocabulary = ""
+        self.last_context = ""
         self.use_mlx = engine == "mlx" or (engine == "auto" and is_apple_silicon())
         self.model_size = ""
         self.use_model(resolve_model(model_size))
@@ -427,14 +429,18 @@ class Transcriber:
             parts.append(context)
         return " ".join(parts)
 
-    def transcribe_chunk(self, chunk: np.ndarray, offset: float = 0.0) -> list[Segment]:
-        """Transkripsi satu potongan (tanpa membersihkan); waktu dihitung dari awal rekaman."""
+    def transcribe_chunk(self, chunk: np.ndarray, offset: float = 0.0, context: str = "") -> list[Segment]:
+        """Transkripsi satu potongan (tanpa membersihkan); waktu dihitung dari awal rekaman.
+
+        context: akhir kalimat potongan sebelumnya, agar potongan pendek (transkrip live) tetap bersambung.
+        Akhir kalimat potongan ini disimpan di `last_context` untuk potongan berikutnya.
+        """
+        self.last_context = context
         condensed = Condensed(remove_rumble(chunk))
         if condensed.seconds < 0.5:
             return []
         audio = normalize_loudness(condensed.audio)
         segments: list[Segment] = []
-        context = ""
         for start, end in chunk_bounds(audio, chunk_seconds=WINDOW_SECONDS, search_seconds=WINDOW_SEARCH_SECONDS):
             base = start / SAMPLE_RATE
             window = self.engine.transcribe(audio[start:end], self.prompt(context))
@@ -448,6 +454,7 @@ class Transcriber:
                 context = text[-CONTEXT_CHARS:].split(" ", 1)[-1] if len(text) > CONTEXT_CHARS else text
             else:
                 context = ""
+        self.last_context = context
         return segments
 
     def transcribe_wav(self, reader, start: int = 0,

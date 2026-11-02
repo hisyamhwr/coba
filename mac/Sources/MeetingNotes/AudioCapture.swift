@@ -23,10 +23,11 @@ final class AudioCapture: NSObject, SCStreamOutput, SCStreamDelegate {
     static let format = AVAudioFormat(commonFormat: .pcmFormatFloat32, sampleRate: 16000, channels: 1, interleaved: false)!
     /// Batas antrean audio sistem (2 detik) agar tidak menumpuk jika jam mic dan sistem sedikit berbeda.
     private static let maxSystemBacklog = 32000
-    /// Cadangan audio sistem (250 ms) sebelum mulai dipakai. Audio Zoom/Teams datang tidak serata mic; tanpa
+    /// Cadangan audio sistem sebelum mulai dipakai. Audio dari rekam layar datang tidak serata mic; tanpa
     /// cadangan, setiap kali datang sedikit terlambat celahnya terisi hening sehingga suara peserta "patah-patah"
-    /// dan akurasi transkripsi turun.
-    private static let systemPrebuffer = 4000
+    /// dan akurasi transkripsi turun. Core Audio tap jauh lebih rata, jadi cukup cadangan kecil (lebih real time).
+    private static let screenPrebuffer = 4000   // 250 ms
+    private static let tapPrebuffer = 1600      // 100 ms
     /// Campuran mic + meeting dikecilkan sedikit agar tidak pecah (clipping) saat keduanya keras bersamaan.
     private static let mixGain: Float = 0.8
 
@@ -37,7 +38,8 @@ final class AudioCapture: NSObject, SCStreamOutput, SCStreamDelegate {
 
     /// Potongan campuran 16 kHz mono untuk transkrip live, beserta RMS asli (sebelum dikuatkan) untuk deteksi
     /// jeda bicara. Campuran ini dikuatkan otomatis per jalur; file rekaman tetap asli.
-    var onSamples: ((AVAudioPCMBuffer, Float) -> Void)?
+    /// Argumen ketiga: posisi akhir potongan ini dalam rekaman (detik), untuk menyelaraskan teks live.
+    var onSamples: ((AVAudioPCMBuffer, Float, Double) -> Void)?
     /// Level 0...1 per jalur: mic (suara kita) dan audio meeting (peserta online).
     var onLevels: ((_ mic: Float, _ system: Float) -> Void)?
     /// Masalah yang terdeteksi saat merekam (mis. mic hanya memberi hening total), untuk ditampilkan di pulau.
@@ -46,6 +48,15 @@ final class AudioCapture: NSObject, SCStreamOutput, SCStreamDelegate {
     private(set) var systemAudioActive = false
 
     private let output: URL
+    /// Audio meeting lewat Core Audio tap (macOS 14.2+); bila tidak bisa, otomatis lewat rekam layar.
+    private let useCoreAudioTap: Bool
+    /// Peredam derau mic bawaan macOS (Voice Processing).
+    private let noiseReduction: Bool
+    /// SystemAudioTap (disimpan sebagai AnyObject karena tipenya hanya ada di macOS 14.2+).
+    private var tap: AnyObject?
+    private var systemPrebuffer = AudioCapture.screenPrebuffer
+    private(set) var systemSourceText = "rekam layar"
+    private var systemSilenceReported = false
     private let engine = AVAudioEngine()
     private var micConverter: AVAudioConverter?
     private var systemConverter: AVAudioConverter?
@@ -85,8 +96,10 @@ final class AudioCapture: NSObject, SCStreamOutput, SCStreamDelegate {
     private let systemQueue = DispatchQueue(label: "meetingnotes.system-audio")
     private let writeQueue = DispatchQueue(label: "meetingnotes.writer")
 
-    init(output: URL) {
+    init(output: URL, coreAudioTap: Bool = true, noiseReduction: Bool = false) {
         self.output = output
+        self.useCoreAudioTap = coreAudioTap
+        self.noiseReduction = noiseReduction
     }
 
     static func requestMicAccess() async -> Bool {
@@ -138,10 +151,21 @@ final class AudioCapture: NSObject, SCStreamOutput, SCStreamDelegate {
 
     /// Mulai merekam audio Zoom/Meet/Teams. Mengembalikan peringatan jika tidak bisa.
     func startSystem() async -> String? {
+        #if compiler(>=5.9.2)
+        if useCoreAudioTap, #available(macOS 14.2, *) {
+            do {
+                try startTap()
+                return nil
+            } catch {
+                note("Core Audio tap gagal (\(error.localizedDescription)); memakai rekam layar")
+            }
+        }
+        #endif
         do {
             try await startSystemAudio()
             systemAudioActive = true
-            note("Audio sistem mulai")
+            systemSourceText = "rekam layar"
+            note("Audio sistem mulai (rekam layar)")
             return nil
         } catch {
             note("Audio sistem gagal: \(error.localizedDescription)")
@@ -150,9 +174,68 @@ final class AudioCapture: NSObject, SCStreamOutput, SCStreamDelegate {
         }
     }
 
+    #if compiler(>=5.9.2)
+    @available(macOS 14.2, *)
+    private func startTap() throws {
+        let newTap = SystemAudioTap(ioQueue: systemQueue, excludedBundleIDs: Self.excludedApps) { [weak self] buffer in
+            self?.handleSystem(buffer)
+        }
+        newTap.onDeviceChange = { [weak self] in self?.restartTap() }
+        try newTap.start()
+        // Rekaman bisa saja sudah dihentikan selagi tap disiapkan.
+        guard running else {
+            newTap.stop()
+            return
+        }
+        lock.lock()
+        systemPrebuffer = Self.tapPrebuffer
+        lock.unlock()
+        tap = newTap
+        systemAudioActive = true
+        systemSourceText = "Core Audio tap, \(newTap.formatText)"
+        note("Audio sistem mulai (\(systemSourceText))")
+    }
+
+    /// Perangkat output berganti (headset dipasang/dilepas): pasang ulang tap pada perangkat yang baru.
+    @available(macOS 14.2, *)
+    private func restartTap() {
+        guard running, let old = tap as? SystemAudioTap else { return }
+        old.stop()
+        tap = nil
+        do {
+            try startTap()
+            systemRestarts += 1
+            note("Perangkat output berganti; audio meeting dipasang ulang")
+        } catch {
+            systemAudioActive = false
+            note("Gagal memasang ulang Core Audio tap: \(error.localizedDescription); beralih ke rekam layar")
+            Task { [weak self] in
+                guard let self, self.running else { return }
+                do {
+                    try await self.startSystemAudio()
+                    self.systemAudioActive = true
+                    self.systemSourceText = "rekam layar"
+                } catch {
+                    self.onProblem?("Audio meeting terputus. Selesaikan lalu mulai rekam lagi.")
+                }
+            }
+        }
+    }
+    #endif
+
+    private func stopTap() {
+        #if compiler(>=5.9.2)
+        if #available(macOS 14.2, *) {
+            (tap as? SystemAudioTap)?.stop()
+        }
+        #endif
+        tap = nil
+    }
+
     /// Hentikan rekaman dan tutup file WAV.
     func stop() {
         running = false
+        stopTap()
         if let configObserver { NotificationCenter.default.removeObserver(configObserver) }
         configObserver = nil
         engine.inputNode.removeTap(onBus: 0)
@@ -194,12 +277,13 @@ final class AudioCapture: NSObject, SCStreamOutput, SCStreamDelegate {
         @unknown default: micStatus = "tidak diketahui"
         }
         let version = Bundle.main.object(forInfoDictionaryKey: "CFBundleShortVersionString") as? String ?? "?"
+        let systemStatus = systemAudioActive ? "aktif (" + systemSourceText + ")" : "TIDAK aktif"
         return """
         Meeting Notes v\(version)
         Mikrofon        : \(micName) (\(micFormatText)), izin \(micStatus)
         Mic diterima    : \(String(format: "%.1f", micSeconds)) detik, puncak \(Self.describe(micPeak))
         Mic dipasang ulang: \(micRestarts)x
-        Audio sistem    : \(systemAudioActive ? "aktif" : "TIDAK aktif"), dipasang ulang \(systemRestarts)x, \
+        Audio sistem    : \(systemStatus), dipasang ulang \(systemRestarts)x, \
         \(String(format: "%.1f", Double(sysFrames) / 16000)) detik diterima, puncak \(Self.describe(sysPeak))
 
         """
@@ -215,15 +299,35 @@ final class AudioCapture: NSObject, SCStreamOutput, SCStreamDelegate {
     private func startMic() throws {
         micName = AVCaptureDevice.default(for: .audio)?.localizedName ?? "mikrofon"
         let input = engine.inputNode
+        if noiseReduction { enableNoiseReduction(input) }
         let inputFormat = input.outputFormat(forBus: 0)
         guard inputFormat.sampleRate > 0, inputFormat.channelCount > 0 else { throw CaptureError.noMicrophone }
         micFormatText = "\(Int(inputFormat.sampleRate)) Hz, \(inputFormat.channelCount) kanal"
         micConverter = Self.makeConverter(from: inputFormat)
-        input.installTap(onBus: 0, bufferSize: 4096, format: inputFormat) { [weak self] buffer, _ in
+        // Potongan ±40 ms (bukan 85 ms): suara sampai ke transkrip live lebih cepat.
+        input.installTap(onBus: 0, bufferSize: 2048, format: inputFormat) { [weak self] buffer, _ in
             self?.handleMic(buffer)
         }
         engine.prepare()
         try engine.start()
+    }
+
+    /// Peredam derau & penguat otomatis bawaan macOS untuk mic (Voice Processing, sama seperti FaceTime).
+    /// Volume aplikasi lain tidak dikecilkan. Gema suara peserta dari speaker tetap ditangani di transkrip
+    /// (macOS hanya menghapus gema dari suara yang diputar aplikasi ini sendiri).
+    private func enableNoiseReduction(_ input: AVAudioInputNode) {
+        guard !input.isVoiceProcessingEnabled else { return }
+        do {
+            try input.setVoiceProcessingEnabled(true)
+            let ducking = AVAudioVoiceProcessingOtherAudioDuckingConfiguration(
+                enableAdvancedDucking: false, duckingLevel: .min)
+            input.voiceProcessingOtherAudioDuckingConfiguration = ducking
+            // Voice Processing butuh jalur output yang tersambung (diisi hening).
+            _ = engine.mainMixerNode
+            note("Peredam derau mic aktif")
+        } catch {
+            note("Peredam derau mic gagal: \(error.localizedDescription)")
+        }
     }
 
     /// Satu baris per 10 detik: level mic dan audio meeting, agar terlihat kapan salah satunya hening.
@@ -284,8 +388,20 @@ final class AudioCapture: NSObject, SCStreamOutput, SCStreamDelegate {
                 + "lalu buka ulang app.")
         }
 
+        if !systemSilenceReported, frames >= 16000 * 120 {
+            lock.lock()
+            let neverHeard = systemPeak == 0
+            lock.unlock()
+            if neverHeard && systemAudioActive {
+                systemSilenceReported = true
+                note("Audio meeting hening total selama 2 menit (\(systemSourceText))")
+                onProblem?("Suara peserta belum terdengar sama sekali. Bila meeting sedang bersuara, buka menu bar → "
+                    + "matikan \"Audio meeting via Core Audio\", lalu mulai rekam lagi.")
+            }
+        }
+
         lock.lock()
-        if !systemFlowing, systemBuffer.count >= Self.systemPrebuffer { systemFlowing = true }
+        if !systemFlowing, systemBuffer.count >= systemPrebuffer { systemFlowing = true }
         let take = systemFlowing ? min(mic.count, systemBuffer.count) : 0
         let system = Array(systemBuffer.prefix(take))
         systemBuffer.removeFirst(take)
@@ -315,11 +431,15 @@ final class AudioCapture: NSObject, SCStreamOutput, SCStreamDelegate {
         if !system.isEmpty { vDSP_rmsqv(system, 1, &systemRMS, vDSP_Length(system.count)) }
         // Saat peserta bicara lewat speaker, mic ikut menangkap gemanya: mic tidak dikuatkan banyak agar gema
         // tidak menumpuk di atas suara asli.
-        let liveMic = micLeveler.process(mic, maxGain: systemRMS > Leveler.floor ? 2 : Leveler.maxGain)
+        let systemTalking = systemRMS > Leveler.floor
+        let liveMic = micLeveler.process(mic, maxGain: systemTalking ? 2 : Leveler.maxGain)
         let liveSystem = systemLeveler.process(systemTrack, maxGain: Leveler.maxGain)
+        // Mic jauh lebih pelan dari suara peserta = kemungkinan besar hanya gema dari speaker: diredam di umpan
+        // live agar pengenal suara tidak mendengar kalimat yang sama dua kali. Saat kamu bicara, mic lebih keras.
+        let micWeight: Float = systemTalking && micRMS < systemRMS * 0.5 ? 0.3 : 1
         var liveMix = liveMic
         for i in 0..<liveMix.count {
-            liveMix[i] = Leveler.limit(liveMix[i] + liveSystem[i])
+            liveMix[i] = Leveler.limit(liveMix[i] * micWeight + liveSystem[i])
         }
 
         writeQueue.async { [weak self] in
@@ -339,7 +459,7 @@ final class AudioCapture: NSObject, SCStreamOutput, SCStreamDelegate {
         if let onSamples, let liveOut = Self.makeBuffer(liveMix) {
             var rms: Float = 0
             vDSP_rmsqv(mixed, 1, &rms, vDSP_Length(mixed.count))
-            onSamples(liveOut, rms)
+            onSamples(liveOut, rms, Double(frames) / 16000)
         }
         let micLevel = min(micRMS * 8, 1)
         let systemLevel = min(systemRMS * 8, 1)
@@ -389,26 +509,32 @@ final class AudioCapture: NSObject, SCStreamOutput, SCStreamDelegate {
         try? sampleBuffer.withAudioBufferList { list, _ in
             guard let pcm = AVAudioPCMBuffer(pcmFormat: format, bufferListNoCopy: list.unsafePointer)
             else { return }
-            if systemConverter == nil || systemFormat != format {
-                systemConverter = Self.makeConverter(from: format)
-                systemFormat = format
-            }
-            guard let converter = systemConverter else { return }
-            let samples = Self.convert(pcm, with: converter)
-            guard !samples.isEmpty else { return }
-            var peak: Float = 0
-            vDSP_maxmgv(samples, 1, &peak, vDSP_Length(samples.count))
-            lock.lock()
-            systemFrames += samples.count
-            systemPeak = max(systemPeak, peak)
-            windowSystemFrames += samples.count
-            windowSystemPeak = max(windowSystemPeak, peak)
-            systemBuffer.append(contentsOf: samples)
-            if systemBuffer.count > Self.maxSystemBacklog {
-                systemBuffer.removeFirst(systemBuffer.count - Self.maxSystemBacklog)
-            }
-            lock.unlock()
+            handleSystem(pcm)
         }
+    }
+
+    /// Potongan audio meeting (dari Core Audio tap atau rekam layar), selalu di `systemQueue`.
+    private func handleSystem(_ pcm: AVAudioPCMBuffer) {
+        let format = pcm.format
+        if systemConverter == nil || systemFormat != format {
+            systemConverter = Self.makeConverter(from: format)
+            systemFormat = format
+        }
+        guard let converter = systemConverter else { return }
+        let samples = Self.convert(pcm, with: converter)
+        guard !samples.isEmpty else { return }
+        var peak: Float = 0
+        vDSP_maxmgv(samples, 1, &peak, vDSP_Length(samples.count))
+        lock.lock()
+        systemFrames += samples.count
+        systemPeak = max(systemPeak, peak)
+        windowSystemFrames += samples.count
+        windowSystemPeak = max(windowSystemPeak, peak)
+        systemBuffer.append(contentsOf: samples)
+        if systemBuffer.count > Self.maxSystemBacklog {
+            systemBuffer.removeFirst(systemBuffer.count - Self.maxSystemBacklog)
+        }
+        lock.unlock()
     }
 
     /// macOS bisa menghentikan tangkapan audio (mis. perangkat output berganti ke headset). Sebelumnya audio

@@ -76,6 +76,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         menu.addItem(.separator())
         menu.addItem(NSMenuItem(title: "Buat juga Word (.docx)", action: #selector(toggleDocx), keyEquivalent: ""))
         menu.addItem(NSMenuItem(title: "Transkrip live", action: #selector(toggleLive), keyEquivalent: ""))
+        menu.addItem(NSMenuItem(title: "Audio meeting via Core Audio", action: #selector(toggleTap), keyEquivalent: ""))
+        menu.addItem(NSMenuItem(title: "Peredam derau mic", action: #selector(toggleNoise), keyEquivalent: ""))
         menu.addItem(.separator())
         menu.addItem(NSMenuItem(title: "Bentuk: Island (menyatu dengan notch)", action: #selector(useIsland),
                                 keyEquivalent: ""))
@@ -98,6 +100,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                 item.state = controller.state.exportDocx ? .on : .off
             } else if item.action == #selector(toggleLive) {
                 item.state = controller.state.liveTranscript ? .on : .off
+            } else if item.action == #selector(toggleTap) {
+                item.state = controller.state.coreAudioTap ? .on : .off
+            } else if item.action == #selector(toggleNoise) {
+                item.state = controller.state.micNoiseReduction ? .on : .off
             } else if item.action == #selector(useIsland) {
                 item.state = controller.state.style == .island ? .on : .off
             } else if item.action == #selector(usePill) {
@@ -115,6 +121,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     @objc private func openFolder() { controller.openFolder() }
     @objc private func toggleDocx() { controller.state.exportDocx.toggle() }
     @objc private func toggleLive() { controller.state.liveTranscript.toggle() }
+    @objc private func toggleTap() { controller.state.coreAudioTap.toggle() }
+    @objc private func toggleNoise() { controller.state.micNoiseReduction.toggle() }
     @objc private func useIsland() { controller.state.style = .island }
     @objc private func usePill() { controller.state.style = .pill }
     @objc private func screenChanged() {

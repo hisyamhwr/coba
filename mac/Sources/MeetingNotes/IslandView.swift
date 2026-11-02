@@ -21,7 +21,8 @@ private enum Palette {
                                     startPoint: .top, endPoint: .bottom)
     /// Latar kartu di dalam pulau (mis. kartu transkrip live).
     static let card = Color.white.opacity(0.055)
-    static let secondary = Color.white.opacity(0.72)               // teks transkrip yang sudah final
+    static let refined = Color.white.opacity(0.94)                 // teks live yang sudah dikoreksi Whisper
+    static let secondary = Color.white.opacity(0.66)               // teks live dari pengenal Apple (belum dikoreksi)
     static let muted = Color.white.opacity(0.55)                   // ±6:1 di atas hitam
 
     /// Tombol aksi utama (Mulai, Susun ulang): biru tua → cyan gelap agar teks putih tetap kontras.
@@ -986,15 +987,10 @@ private struct LiveText: View {
 
     var body: some View {
         Group {
-            if caption.committed.isEmpty && caption.partial.isEmpty {
+            if caption.refined.isEmpty && caption.committed.isEmpty && caption.partial.isEmpty {
                 Text("Mendengarkan…").foregroundStyle(Palette.muted)
             } else {
-                let partial = caption.partial
-                let committed = Self.tail(caption.committed, max(0, Self.maxCharacters - partial.count))
-                let gap = committed.isEmpty || partial.isEmpty ? "" : " "
-                let head: Text = Text(committed).foregroundStyle(Palette.secondary)
-                let newest: Text = Text(Self.tail(partial, Self.maxCharacters)).foregroundStyle(Palette.partial)
-                head + Text(gap) + newest
+                captionText
             }
         }
         .font(Typo.live)
@@ -1004,6 +1000,24 @@ private struct LiveText: View {
         .frame(maxWidth: .infinity, alignment: .bottomLeading)
         .frame(height: 62, alignment: .bottomLeading)
         .animation(.easeOut(duration: 0.12), value: caption.partial)
+        .animation(.easeOut(duration: 0.25), value: caption.refined)
+    }
+
+    /// Tiga lapis dengan warna berbeda: sudah dikoreksi Whisper (putih), kata Apple yang belum dikoreksi
+    /// (abu-abu), dan kata yang sedang dikenali (gradien). Hanya ±150 karakter terakhir yang ditampilkan.
+    private var captionText: Text {
+        let partial = Self.tail(caption.partial, Self.maxCharacters)
+        var budget = max(0, Self.maxCharacters - partial.count)
+        let committed = Self.tail(caption.committed, budget)
+        budget = max(0, budget - committed.count)
+        let refined = budget > 0 ? Self.tail(caption.refined, budget) : ""
+        let gap1 = refined.isEmpty || (committed.isEmpty && partial.isEmpty) ? "" : " "
+        let gap2 = committed.isEmpty || partial.isEmpty ? "" : " "
+        let first: Text = Text(refined).foregroundStyle(Palette.refined)
+        let second: Text = Text(committed).foregroundStyle(Palette.secondary)
+        let third: Text = Text(partial).foregroundStyle(Palette.partial)
+        let firstTwo: Text = first + Text(gap1) + second
+        return firstTwo + Text(gap2) + third
     }
 
     /// Bagian akhir teks (maksimal `limit` karakter), dipotong di batas kata dan diawali "…".

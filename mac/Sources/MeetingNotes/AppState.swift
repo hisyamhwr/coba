@@ -52,6 +52,14 @@ final class AppState: ObservableObject {
         didSet { UserDefaults.standard.set(liveTranscript, forKey: "liveTranscript") }
     }
 
+    /// Audio meeting lewat Core Audio tap (macOS 14.2+); dimatikan = lewat rekam layar seperti versi lama.
+    @Published var coreAudioTap = UserDefaults.standard.object(forKey: "coreAudioTap") as? Bool ?? true {
+        didSet { UserDefaults.standard.set(coreAudioTap, forKey: "coreAudioTap") }
+    }
+    /// Peredam derau mic bawaan macOS; berguna di ruangan bising.
+    @Published var micNoiseReduction = UserDefaults.standard.bool(forKey: "micNoiseReduction") {
+        didSet { UserDefaults.standard.set(micNoiseReduction, forKey: "micNoiseReduction") }
+    }
     /// Bentuk pulau; diingat antar sesi.
     @Published var style = IslandStyle(rawValue: UserDefaults.standard.string(forKey: "islandStyle") ?? "") ?? .island {
         didSet { UserDefaults.standard.set(style.rawValue, forKey: "islandStyle") }
@@ -133,6 +141,12 @@ final class LiveMeter {
         set { if caption.partial != newValue { caption.partial = newValue } }
     }
 
+    /// Bagian yang sudah dikoreksi Whisper.
+    var liveRefined: String {
+        get { caption.refined }
+        set { if caption.refined != newValue { caption.refined = newValue } }
+    }
+
     /// Level per jalur: suara kita (mic) dan suara peserta (audio meeting).
     func setLevels(mic: Float, system: Float) {
         if audio.mic != mic { audio.mic = mic }
@@ -155,6 +169,7 @@ final class RecordingClock: ObservableObject {
 
 @MainActor
 final class LiveCaption: ObservableObject {
+    @Published var refined = ""
     @Published var committed = ""
     @Published var partial = ""
 }

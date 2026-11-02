@@ -1,18 +1,29 @@
 import AVFoundation
 import Speech
 
-/// Teks live: bagian yang sudah final dan kata-kata yang masih dikenali (bisa berubah).
+/// Teks live dalam tiga lapis:
+/// - `refined`: hasil Whisper dari worker latar belakang (akurat, memakai kamus istilah), beberapa detik di
+///   belakang ucapan;
+/// - `committed`: kata dari pengenal suara Apple yang sudah final, untuk bagian yang belum dikoreksi Whisper;
+/// - `partial`: kata yang sedang dikenali (bisa berubah), muncul hampir seketika.
 struct Caption: Equatable {
+    var refined: String = ""
     var committed: String
     var partial: String = ""
 }
 
-/// Transkrip live (perkiraan cepat) dengan pengenal suara bawaan macOS, bahasa Indonesia.
+/// Transkrip live: kata instan dari pengenal suara bawaan macOS (bahasa Indonesia), lalu diganti hasil Whisper
+/// begitu worker latar belakang selesai mentranskripsi potongan itu (lihat `applyRefined`).
 ///
-/// Hanya untuk ditampilkan selama rapat. Notulen akhir tetap dibuat dari rekaman lengkap oleh Whisper/mesin
-/// pilihan yang lebih akurat. Pengenal Apple dibatasi ±1 menit per sesi, jadi sesi diganti otomatis: setelah
-/// 40 detik pada jeda bicara pertama (agar tidak memotong kata), paling lambat 55 detik.
+/// Setiap kata Apple diberi waktu (posisi dalam rekaman) saat pertama muncul, sehingga kata yang sudah dicakup
+/// Whisper bisa disembunyikan tanpa tampil dua kali. Pengenal Apple dibatasi ±1 menit per sesi, jadi sesi
+/// diganti otomatis: setelah 40 detik pada jeda bicara pertama (agar tidak memotong kata), paling lambat 55 detik.
 final class LiveTranscriber {
+    private struct Word {
+        let text: String
+        let time: Double
+    }
+
     private let recognizer = SFSpeechRecognizer(locale: Locale(identifier: "id-ID"))
     private let onText: (Caption) -> Void
     /// Istilah dari kamus (mis. FE, deploy, flagging) agar pengenal suara lebih tepat menangkap istilah teknis.
@@ -25,13 +36,18 @@ final class LiveTranscriber {
     private var request: SFSpeechAudioBufferRecognitionRequest?
     private var task: SFSpeechRecognitionTask?
     private var generation = 0
-    private var committed = ""
-    private var partial = ""
+    private var committedWords: [Word] = []
+    private var partialWords: [Word] = []
     /// Kata sementara dari sesi lama yang baru diganti; tetap tampil sampai hasil akhir sesi lama datang
     /// (lalu diganti hasil akhir itu, sehingga tidak tercatat dua kali).
-    private var carried = ""
+    private var carriedWords: [Word] = []
+    /// Teks Whisper dan batas waktunya: kata Apple sebelum batas ini tidak ditampilkan lagi.
+    private var refined = ""
+    private var refinedUntil: Double = 0
+    /// Posisi audio terbaru yang sudah dikirim ke pengenal (detik rekaman).
+    private var audioTime: Double = 0
     private var running = false
-    /// Waktu terakhir teks dikirim ke UI (nanodetik), untuk membatasi update ±7x per detik.
+    /// Waktu terakhir teks dikirim ke UI (nanodetik), untuk membatasi update ±10x per detik.
     private var lastEmit: UInt64 = 0
     /// Teks yang tertahan pembatas; dikirim menyusul agar kata terakhir sebelum jeda tidak pernah hilang.
     private var pending: Caption?
@@ -40,11 +56,16 @@ final class LiveTranscriber {
     private var forceServer = false
     /// Error beruntun tanpa satu hasil pun; berhenti mencoba setelah beberapa kali agar tidak berputar terus.
     private var failures = 0
-    private static let minEmitInterval: UInt64 = 150_000_000
+    private var loggedMode = false
+    private static let minEmitInterval: UInt64 = 100_000_000
     private static let rotateAfterPause: UInt64 = 40_000_000_000
     private static let rotateAlways: UInt64 = 55_000_000_000
     /// RMS di bawah ini dianggap jeda bicara.
     private static let pauseLevel: Float = 0.008
+    /// Perkiraan jeda pengenal Apple: kata yang muncul sekarang diucapkan ±0,8 detik lalu.
+    private static let recognizerLag: Double = 0.8
+    private static let maxWords = 160
+    private static let maxRefinedCharacters = 600
     private var sessionStart: UInt64 = 0
     private var rotating = false
     private let rotateQueue = DispatchQueue(label: "meetingnotes.live-rotate")
@@ -86,8 +107,10 @@ final class LiveTranscriber {
 
     /// Dipanggil dari thread audio dengan potongan 16 kHz mono yang sudah dikuatkan otomatis. `rms` adalah
     /// level asli sebelum dikuatkan, untuk mendeteksi jeda bicara (derau yang ikut dikuatkan tidak dikira suara).
-    func append(_ buffer: AVAudioPCMBuffer, rms: Float) {
+    /// `time`: posisi akhir potongan dalam rekaman (detik).
+    func append(_ buffer: AVAudioPCMBuffer, rms: Float, time: Double) {
         lock.lock()
+        audioTime = time
         request?.append(buffer)
         let age = DispatchTime.now().uptimeNanoseconds - sessionStart
         let due = running && request != nil && !rotating
@@ -98,6 +121,23 @@ final class LiveTranscriber {
         if due { rotateQueue.async { [weak self] in self?.rotate() } }
     }
 
+    /// Hasil Whisper untuk audio sampai detik `until`: menggantikan kata-kata Apple pada rentang itu.
+    func applyRefined(until: Double, texts: [String]) {
+        lock.lock()
+        let added = texts.joined(separator: " ").trimmingCharacters(in: .whitespaces)
+        if !added.isEmpty {
+            refined = refined.isEmpty ? added : refined + " " + added
+            if refined.count > Self.maxRefinedCharacters {
+                refined = String(refined.suffix(Self.maxRefinedCharacters * 2 / 3))
+            }
+        }
+        refinedUntil = max(refinedUntil, until)
+        committedWords.removeAll { $0.time < refinedUntil }
+        let caption = makeCaption()
+        lock.unlock()
+        emit(caption, force: true)
+    }
+
     /// Tutup sesi lama (hasil akhirnya tetap dipakai) dan buka sesi baru.
     func rotate() {
         lock.lock()
@@ -105,9 +145,9 @@ final class LiveTranscriber {
         let old = request
         request = nil
         // Kata yang sedang dikenali tetap tampil sampai hasil akhir sesi lama datang.
-        if !partial.isEmpty {
-            carried = partial
-            partial = ""
+        if !partialWords.isEmpty {
+            carriedWords = partialWords
+            partialWords = []
         }
         lock.unlock()
         old?.endAudio()
@@ -131,8 +171,14 @@ final class LiveTranscriber {
         request.contextualStrings = terms
         lock.lock()
         let onDevice = recognizer.supportsOnDeviceRecognition && !forceServer
+        let logMode = !loggedMode
+        loggedMode = true
         lock.unlock()
         request.requiresOnDeviceRecognition = onDevice
+        if logMode {
+            onLog?("Transkrip live: pengenal \(onDevice ? "di perangkat (cepat)" : "online Apple") "
+                + "(dukungan di perangkat untuk id-ID: \(recognizer.supportsOnDeviceRecognition ? "ya" : "tidak"))")
+        }
 
         lock.lock()
         generation += 1
@@ -142,86 +188,123 @@ final class LiveTranscriber {
         lock.unlock()
 
         let newTask = recognizer.recognitionTask(with: request) { [weak self] result, error in
-            guard let self else { return }
-            self.lock.lock()
-            let isCurrent = myGeneration == self.generation
-            if result != nil { self.failures = 0 }
-            if let error, result == nil, isCurrent, self.running {
-                // Sebelumnya error didiamkan dan sesi tidak dibuka lagi, sehingga pulau hanya menulis
-                // "Mendengarkan…" sampai rotasi berikutnya. Sekarang sesi langsung dibuka ulang.
-                if !self.partial.isEmpty {
-                    self.committed += " " + self.partial
-                    self.partial = ""
-                }
-                // 1110 = tidak ada ucapan (hening sebentar): wajar, tidak dihitung sebagai kegagalan dan tidak
-                // alasan pindah ke pengenal online (sebelumnya jeda hening pertama membuat transkrip live
-                // permanen memakai pengenal online yang lebih lambat).
-                let nsError = error as NSError
-                let benign = nsError.code == 1110
-                if !benign { self.failures += 1 }
-                let failures = self.failures
-                if onDevice && !benign { self.forceServer = true }
-                self.lock.unlock()
-                if nsError.code != 1110 { self.onLog?("Transkrip live error (\(onDevice ? "di perangkat" : "online")): "
-                    + "\(nsError.domain) \(nsError.code) \(error.localizedDescription)") }
-                if failures <= 3 {
-                    self.beginRequest()
-                } else {
-                    self.onText(Caption(committed: "Transkrip live gagal: \(error.localizedDescription) Pastikan "
-                        + "Dictation menyala (System Settings → Keyboard) dan internet tersambung. Rekaman tetap "
-                        + "berjalan."))
-                }
-                return
-            }
-            if let result {
-                let text = result.bestTranscription.formattedString
-                if result.isFinal || !isCurrent {
-                    if result.isFinal {
-                        self.committed += " " + text
-                        if !isCurrent { self.carried = "" }
-                    }
-                    if isCurrent { self.partial = "" }
-                } else {
-                    self.partial = text
-                }
-            } else if error != nil {
-                if isCurrent, !self.partial.isEmpty {
-                    self.committed += " " + self.partial
-                    self.partial = ""
-                } else if !isCurrent, !self.carried.isEmpty {
-                    // Sesi lama berakhir tanpa hasil akhir: simpan kata sementaranya.
-                    self.committed += " " + self.carried
-                    self.carried = ""
-                }
-            }
-            // Simpan secukupnya saja; yang ditampilkan hanya 2-3 baris terakhir.
-            if self.committed.count > 600 { self.committed = String(self.committed.suffix(400)) }
-            let caption = Caption(
-                committed: self.corrections.apply(self.committed.trimmingCharacters(in: .whitespaces)),
-                partial: self.corrections.apply((self.carried + " " + self.partial).trimmingCharacters(in: .whitespaces))
-            )
-            // Hasil akhir selalu dikirim; hasil sementara dibatasi agar UI tidak digambar ulang tiap kata.
-            let now = DispatchTime.now().uptimeNanoseconds
-            let isFinal = result?.isFinal ?? true
-            let elapsed = now - self.lastEmit
-            let shouldEmit = isFinal || elapsed >= Self.minEmitInterval
-            var scheduleFlush = false
-            if shouldEmit {
-                self.lastEmit = now
-                self.pending = nil
-            } else {
-                self.pending = caption
-                scheduleFlush = !self.flushScheduled
-                self.flushScheduled = true
-            }
-            self.lock.unlock()
-            if shouldEmit { self.onText(caption) }
-            if scheduleFlush { self.scheduleFlush(after: Self.minEmitInterval - elapsed) }
+            self?.handle(result: result, error: error, generation: myGeneration, onDevice: onDevice)
         }
         lock.lock()
         // Bisa saja sesi yang lebih baru sudah dibuka dari dalam callback (pemulihan error).
         if generation == myGeneration { task = newTask }
         lock.unlock()
+    }
+
+    private func handle(result: SFSpeechRecognitionResult?, error: Error?, generation myGeneration: Int,
+                        onDevice: Bool) {
+        lock.lock()
+        let isCurrent = myGeneration == generation
+        if result != nil { failures = 0 }
+        if let error, result == nil, isCurrent, running {
+            // Error: kata yang sedang dikenali disimpan, lalu sesi langsung dibuka ulang.
+            committedWords += partialWords
+            partialWords = []
+            // 1110 = tidak ada ucapan (hening sebentar): wajar, tidak dihitung sebagai kegagalan dan bukan
+            // alasan pindah ke pengenal online yang lebih lambat.
+            let nsError = error as NSError
+            let benign = nsError.code == 1110
+            if !benign { failures += 1 }
+            let failureCount = failures
+            if onDevice && !benign { forceServer = true }
+            lock.unlock()
+            if !benign {
+                onLog?("Transkrip live error (\(onDevice ? "di perangkat" : "online")): "
+                    + "\(nsError.domain) \(nsError.code) \(error.localizedDescription)")
+            }
+            if failureCount <= 3 {
+                beginRequest()
+            } else {
+                onText(Caption(committed: "Transkrip live gagal: \(error.localizedDescription) Pastikan "
+                    + "Dictation menyala (System Settings → Keyboard) dan internet tersambung. Rekaman tetap "
+                    + "berjalan."))
+            }
+            return
+        }
+        var isFinal = true
+        if let result {
+            let text = result.bestTranscription.formattedString
+            isFinal = result.isFinal
+            if result.isFinal && isCurrent {
+                committedWords += stamp(text, previous: partialWords)
+                partialWords = []
+            } else if result.isFinal {
+                committedWords += stamp(text, previous: carriedWords)
+                carriedWords = []
+            } else if isCurrent {
+                partialWords = stamp(text, previous: partialWords)
+            }
+        } else if error != nil {
+            if isCurrent {
+                committedWords += partialWords
+                partialWords = []
+            } else {
+                // Sesi lama berakhir tanpa hasil akhir: simpan kata sementaranya.
+                committedWords += carriedWords
+                carriedWords = []
+            }
+        }
+        // Simpan secukupnya saja; yang ditampilkan hanya 2-3 baris terakhir.
+        if committedWords.count > Self.maxWords {
+            committedWords.removeFirst(committedWords.count - Self.maxWords)
+        }
+        let caption = makeCaption()
+        lock.unlock()
+        emit(caption, force: isFinal)
+    }
+
+    /// Kata-kata dari teks Apple beserta waktunya. Kata pada posisi yang sudah ada mempertahankan waktunya
+    /// (walau ejaannya direvisi); kata baru diberi waktu sekarang dikurangi perkiraan jeda pengenal.
+    /// Dipanggil dengan lock terkunci.
+    private func stamp(_ text: String, previous: [Word]) -> [Word] {
+        let now = max(0, audioTime - Self.recognizerLag)
+        let tokens = text.split(separator: " ")
+        var words: [Word] = []
+        words.reserveCapacity(tokens.count)
+        for (index, token) in tokens.enumerated() {
+            let time = index < previous.count ? previous[index].time : now
+            words.append(Word(text: String(token), time: time))
+        }
+        return words
+    }
+
+    /// Dipanggil dengan lock terkunci.
+    private func makeCaption() -> Caption {
+        let cutoff = refinedUntil
+        let committed = committedWords.filter { $0.time >= cutoff }.map(\.text).joined(separator: " ")
+        let partial = (carriedWords + partialWords).filter { $0.time >= cutoff }.map(\.text).joined(separator: " ")
+        return Caption(
+            refined: corrections.apply(refined),
+            committed: corrections.apply(committed),
+            partial: corrections.apply(partial)
+        )
+    }
+
+    /// Kirim teks ke UI. Hasil final dan koreksi Whisper selalu dikirim; hasil sementara dibatasi ±10x per detik
+    /// agar UI tidak digambar ulang tiap kata, dengan kiriman susulan agar kata terakhir tidak tertahan.
+    private func emit(_ caption: Caption, force: Bool) {
+        lock.lock()
+        // Waktu diambil di dalam lock: kiriman susulan bisa memperbarui lastEmit dari thread lain.
+        let now = DispatchTime.now().uptimeNanoseconds
+        let elapsed = now >= lastEmit ? now - lastEmit : 0
+        let shouldEmit = force || elapsed >= Self.minEmitInterval
+        var scheduleFlush = false
+        if shouldEmit {
+            lastEmit = now
+            pending = nil
+        } else {
+            pending = caption
+            scheduleFlush = !flushScheduled
+            flushScheduled = true
+        }
+        lock.unlock()
+        if shouldEmit { onText(caption) }
+        if scheduleFlush { self.scheduleFlush(after: Self.minEmitInterval - elapsed) }
     }
 
     /// Kirim teks yang tertahan pembatas begitu jedanya habis.

@@ -47,13 +47,17 @@ final class MeetingController {
         ) { [weak self] caption in
             Task { @MainActor in
                 guard let self else { return }
-                if self.meter.liveText != caption.committed { self.meter.liveText = caption.committed }
-                if self.meter.livePartial != caption.partial { self.meter.livePartial = caption.partial }
+                self.meter.liveRefined = caption.refined
+                self.meter.liveText = caption.committed
+                self.meter.livePartial = caption.partial
             }
         } : nil
-        let capture = AudioCapture(output: dir.appendingPathComponent("meeting.wav"))
+        let capture = AudioCapture(output: dir.appendingPathComponent("meeting.wav"),
+                                   coreAudioTap: state.coreAudioTap, noiseReduction: state.micNoiseReduction)
         live?.onLog = { line in capture.note(line) }
-        capture.onSamples = live.map { transcriber in { buffer, rms in transcriber.append(buffer, rms: rms) } }
+        capture.onSamples = live.map { transcriber in
+            { buffer, rms, time in transcriber.append(buffer, rms: rms, time: time) }
+        }
         capture.onLevels = { [weak self] mic, system in
             Task { @MainActor in self?.meter.setLevels(mic: mic, system: system) }
         }
@@ -94,11 +98,16 @@ final class MeetingController {
             self.meter.setLevels(mic: 0, system: 0)
             self.meter.liveText = live == nil ? "Transkrip live dimatikan (hemat baterai)." : ""
             self.meter.livePartial = ""
+            self.meter.liveRefined = ""
             self.state.result = nil
             self.state.phase = .recording
             self.state.expanded = true
             live?.start()
             let worker = LiveWorker(folder: dir)
+            // Hasil Whisper dari worker menggantikan kata-kata kasar transkrip live beberapa detik kemudian.
+            worker.onRefined = live.map { transcriber in
+                { until, texts in transcriber.applyRefined(until: until, texts: texts) }
+            }
             worker.start()
             self.worker = worker
             let timer = Timer(timeInterval: 0.5, repeats: true) { [weak controller = self] _ in

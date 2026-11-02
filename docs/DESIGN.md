@@ -18,7 +18,8 @@ dan merah koral hanya untuk rekam/stop/peringatan (merah tetap tanda "sedang mer
 | `lime` | `#C3F53C` | Aksen: momen Penting (bintang, jumlah, riak) |
 | `red` / `coral` | `#FF4D6D` / `#FF7A8A` | Titik rekam & tombol stop (`record`) / peringatan & gagal |
 | `navy` | `#0B1E3F` | Ikon di atas gradien terang (logo) |
-| kata live sementara | cyan → mint | Kata yang masih dikenali |
+| kata live sementara | cyan → mint | Kata yang masih dikenali (pengenal Apple) |
+| `secondary` / `refined` | putih 66% / 94% | Kata live dari pengenal Apple (belum dikoreksi) / sudah dikoreksi Whisper |
 | `muted` | putih 55% | Teks sekunder (kontras ±6:1 di atas hitam) |
 | `chip` | putih 10% | Latar tombol kapsul/ikon |
 | `rim` | putih 24% → 4% (atas → bawah) | Tepi "kaca" pada tombol, chip, dan kartu |

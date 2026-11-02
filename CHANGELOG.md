@@ -2,6 +2,35 @@
 
 Format versi: `MAYOR.FITUR.PERBAIKAN` (lihat [docs/ROADMAP.md](docs/ROADMAP.md)).
 
+## 3.4.0
+
+Tangkapan audio meeting dan transkrip live tingkat berikutnya. Tetap gratis dan lokal.
+
+**Audio meeting lewat Core Audio (macOS 14.2+)**
+- Suara peserta diambil langsung dari Core Audio (process tap), bukan lewat rekam layar: hanya audio, aliran
+  rata tanpa jeda saat hening, musik (Spotify/Music/Podcasts/TV) dikecualikan di sumbernya, dan otomatis
+  dipasang ulang saat headset dipasang/dilepas. Cukup izin "System Audio Recording Only".
+- Bila tidak bisa (macOS lama, izin ditolak), otomatis kembali ke rekam layar. Bisa dimatikan di menu bar:
+  **Audio meeting via Core Audio**.
+- Peringatan di pulau bila suara peserta hening total selama 2 menit pertama.
+
+**Peredam derau mic** (menu bar, bawaan macOS seperti FaceTime) untuk ruangan bising. Volume aplikasi lain
+tidak dikecilkan. Catatan: macOS hanya menghapus gema dari suara aplikasi ini sendiri, jadi gema suara peserta
+dari speaker tetap ditangani lewat penyaringan gema di transkrip.
+
+**Transkrip live dua lapis: cepat lalu akurat**
+- Kata dari pengenal Apple tetap muncul hampir seketika (abu-abu), lalu ±5–15 detik kemudian diganti hasil
+  **Whisper** (putih) yang jauh lebih akurat untuk bahasa campuran Indonesia-Inggris dan istilah developer,
+  karena memakai kamus istilah dan konteks kalimat sebelumnya.
+- Worker latar belakang kini mentranskripsi potongan pendek (±6–12 detik, dipotong di jeda bicara) bergantian
+  per jalur, dengan akhir kalimat potongan sebelumnya sebagai konteks. Bonus: setelah rapat selesai hanya
+  ±10 detik terakhir yang perlu ditranskripsi, jadi MoM lebih cepat jadi.
+- Gema suara peserta di mic tidak ditampilkan dua kali (disaring sebelum dikirim ke layar), dan di umpan
+  pengenal Apple mic diredam saat isinya hanya gema dari speaker.
+- Lebih responsif: potongan audio ±40 ms (sebelumnya 85 ms), cadangan audio meeting 100 ms lewat Core Audio
+  (sebelumnya 250 ms), update teks hingga 10x per detik.
+- `rekaman.log` mencatat apakah pengenal Apple berjalan di perangkat (cepat) atau online.
+
 ## 3.3.1
 
 Palet baru **neon ocean** (tanpa oranye):

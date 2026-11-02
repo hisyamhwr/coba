@@ -8,6 +8,7 @@
 
 import argparse
 import json
+import sys
 from datetime import datetime
 from pathlib import Path
 
@@ -70,15 +71,20 @@ def main() -> None:
         transcriber = Transcriber(settings.whisper_model, settings.language, settings.whisper_engine)
         transcriber.vocabulary = Glossary(settings.glossary_path).whisper_hint()
 
+        # Log ke stderr (ikuti.log); stdout khusus baris LIVE untuk transkrip live di aplikasi Mac.
         def log(msg: str) -> None:
-            print(f"{datetime.now():%H:%M:%S}  {msg}", flush=True)
+            print(f"{datetime.now():%H:%M:%S}  {msg}", file=sys.stderr, flush=True)
+
+        def on_live(until: float, segments: list) -> None:
+            payload = {"until": round(until, 2), "text": [s.text for s in segments if s.text.strip()]}
+            print("LIVE\t" + json.dumps(payload, ensure_ascii=False), flush=True)
 
         # Unduh model selagi rapat baru dimulai (pertama kali saja), agar potongan pertama tidak tertahan.
         try:
             transcriber.download()
         except Exception as exc:  # noqa: BLE001 - tetap jalan; proses akhir akan mencoba lagi
             log(f"Gagal mengunduh model {transcriber.model_size}: {exc}")
-        follow(args.folder, transcriber, log=log)
+        follow(args.folder, transcriber, log=log, on_live=on_live)
     elif args.command == "bandingkan":
         from .compare import compare, open_report
 

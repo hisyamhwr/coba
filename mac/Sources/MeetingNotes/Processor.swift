@@ -125,28 +125,58 @@ final class Processor {
 /// Saat rapat selesai, `proses` hanya perlu mentranskripsi beberapa menit terakhir. Prosesnya berprioritas
 /// rendah agar Zoom/Teams tetap lancar, dan boleh dihentikan kapan saja (hasil disimpan per potongan).
 final class LiveWorker {
+    private struct LiveUpdate: Decodable {
+        let until: Double
+        let text: [String]
+    }
+
     private let process = Process()
+    private let output = Pipe()
+    /// Sisa baris stdout yang belum lengkap.
+    private var lineBuffer = Data()
+    /// Hasil Whisper untuk transkrip live: (sampai detik ke-, kalimat-kalimat baru). Dipanggil di thread latar.
+    var onRefined: ((Double, [String]) -> Void)?
 
     init(folder: URL) {
         process.executableURL = URL(fileURLWithPath: Config.pythonPath)
         process.arguments = ["-m", "meeting_notes", "ikuti", folder.path]
         process.currentDirectoryURL = URL(fileURLWithPath: Config.repoPath)
         process.environment = Processor.pythonEnvironment()
-        process.qualityOfService = .utility
+        // Prioritas sedang: koreksi live tidak tertinggal, Zoom/Teams tetap didahulukan.
+        process.qualityOfService = .default
         let log = folder.appendingPathComponent("ikuti.log")
         FileManager.default.createFile(atPath: log.path, contents: nil)
         if let handle = try? FileHandle(forWritingTo: log) {
-            process.standardOutput = handle
             process.standardError = handle
         }
+        // stdout: baris "LIVE\t{json}" berisi hasil Whisper terbaru.
+        process.standardOutput = output
     }
 
     func start() {
+        output.fileHandleForReading.readabilityHandler = { [weak self] handle in
+            self?.consume(handle.availableData)
+        }
         try? process.run()
+    }
+
+    private func consume(_ data: Data) {
+        guard !data.isEmpty else { return }
+        lineBuffer.append(data)
+        while let newline = lineBuffer.firstIndex(of: 0x0A) {
+            let line = lineBuffer.subdata(in: lineBuffer.startIndex..<newline)
+            lineBuffer.removeSubrange(lineBuffer.startIndex...newline)
+            guard let text = String(data: line, encoding: .utf8), text.hasPrefix("LIVE\t"),
+                  let json = text.dropFirst(5).data(using: .utf8),
+                  let update = try? JSONDecoder().decode(LiveUpdate.self, from: json)
+            else { continue }
+            onRefined?(update.until, update.text)
+        }
     }
 
     /// Hentikan dan tunggu sampai benar-benar keluar, agar model Whisper tidak dimuat dua kali bersamaan.
     func stop() {
+        output.fileHandleForReading.readabilityHandler = nil
         guard process.isRunning else { return }
         process.terminate()
         process.waitUntilExit()

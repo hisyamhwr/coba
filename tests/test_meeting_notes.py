@@ -1,3 +1,4 @@
+import itertools
 import json
 from datetime import datetime
 from types import SimpleNamespace
@@ -580,9 +581,13 @@ class ChunkTranscriber:
 
     def __init__(self):
         self.chunks = []
+        self.contexts = []
+        self.last_context = ""
 
-    def transcribe_chunk(self, chunk, offset=0.0):
+    def transcribe_chunk(self, chunk, offset=0.0, context=""):
         self.chunks.append((offset, len(chunk) / 16000))
+        self.contexts.append(context)
+        self.last_context = f"akhir {offset:.0f}"
         return [Segment(offset, offset + 1, f"potongan di {offset:.0f}")]
 
     def transcribe(self, audio, on_progress=None, offset=0.0):
@@ -627,17 +632,20 @@ def test_background_transcription_then_process_only_transcribes_the_rest(tmp_pat
     state = incremental.load_state(tmp_path)
     for name, file in incremental.TRACKS.items():
         incremental.advance(tmp_path, state, background, name, incremental.GrowingWav(tmp_path / file))
-    # 7 menit = potongan 2 menit lengkap; potongan terakhir (belum tentu lengkap saat rapat berjalan) ditunda.
+    # Potongan pendek (6-12 detik); potongan terakhir (belum tentu lengkap saat rapat berjalan) ditunda.
     saved = incremental.load_state(tmp_path)
-    assert 200 < saved["sistem"]["until"] < 7 * 60
+    assert 7 * 60 - 13 < saved["sistem"]["until"] < 7 * 60
     assert len(background.chunks) == 2 * len(saved["sistem"]["segments"])
+    assert all(6 <= seconds <= 12.1 for _, seconds in background.chunks)
+    # Setiap potongan menerima akhir kalimat potongan sebelumnya di jalur yang sama.
+    assert background.contexts[1] == "akhir 0" and saved["sistem"]["context"].startswith("akhir")
 
     final = ChunkTranscriber()
     result = process_recording(tmp_path / "meeting.wav", Settings(output_dir=tmp_path / "out"),
                                INFO.started_at, lambda _: None, final)
     # Saat rapat selesai hanya sisa audio yang ditranskripsi, satu kali per jalur.
     assert [round(offset) for offset, _ in final.chunks] == [round(saved["sistem"]["until"])] * 2
-    assert all(seconds < 3 * 60 for _, seconds in final.chunks)
+    assert all(seconds < 13 for _, seconds in final.chunks)
     md = result.markdown_path.read_text(encoding="utf-8")
     assert "potongan di 0" in md and f"potongan di {saved['sistem']['until']:.0f}" in md
 
@@ -773,3 +781,35 @@ def test_transcribe_wav_streams_chunks_and_matches_offsets(tmp_path):
     assert len(recorder.calls) == 3
     assert segments[0].start == pytest.approx(4.0, abs=0.05)
     assert progress[-1] == 1.0
+
+
+def test_live_update_waits_for_both_tracks_and_drops_echo():
+    from meeting_notes.incremental import live_update
+
+    state = {
+        "sistem": {"until": 20.0, "segments": [[1, 4, "kita aktifkan feature flag di staging"],
+                                               [12, 15, "nanti di-deploy setelah UAT"]]},
+        "mic": {"until": 10.0, "segments": [[1.3, 4.2, "kita aktifkan feature flag di staging"],
+                                            [6, 8, "oke siap"]]},
+    }
+    until, segments = live_update(state, 0.0)
+    # Hanya sampai detik 10 (jalur mic baru sampai situ); gema di mic dibuang.
+    assert until == 10.0
+    assert [s.text for s in segments] == ["kita aktifkan feature flag di staging", "oke siap"]
+    state["mic"]["until"] = 20.0
+    until, segments = live_update(state, until)
+    assert until == 20.0 and [s.text for s in segments] == ["nanti di-deploy setelah UAT"]
+    assert live_update(state, until) == (20.0, [])
+
+
+def test_follow_emits_live_lines(tmp_path):
+    from meeting_notes import incremental
+
+    for name in ("sistem.wav", "mic.wav"):
+        sf.write(tmp_path / name, _speech(40), 16000, subtype="PCM_16")
+    updates, rounds = [], iter(range(10))
+    incremental.follow(tmp_path, ChunkTranscriber(), log=lambda _: None, poll_seconds=0,
+                       should_stop=lambda: next(rounds, None) is None,
+                       on_live=lambda until, segs: updates.append((until, [s.text for s in segs])))
+    assert updates and updates[0][1] == ["potongan di 0"]
+    assert all(a[0] < b[0] for a, b in itertools.pairwise(updates))
