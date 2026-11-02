@@ -154,6 +154,31 @@ def speech_level(audio: np.ndarray) -> float:
     return float(np.percentile(rms, 95))
 
 
+# Dengung baru dibuang bila energinya di bawah 80 Hz lebih dari 10% total (ruangan berdengung, mic di meja).
+RUMBLE_SHARE = 0.1
+
+
+def remove_rumble(audio: np.ndarray, sr: int = SAMPLE_RATE, cutoff: float = 80.0) -> np.ndarray:
+    """Buang dengung frekuensi rendah (AC, kipas laptop, meja terketuk, DC offset) di bawah +-80 Hz.
+
+    Suara manusia hampir seluruhnya di atas 100 Hz, jadi ucapan tidak berubah. Tanpa ini dengung ikut terhitung
+    sebagai "suara": deteksi bicara mengira ruangan selalu ramai dan suara pelan tidak dikuatkan cukup.
+    """
+    if len(audio) < sr // 10:
+        return audio
+    spectrum = np.fft.rfft(audio)
+    freqs = np.fft.rfftfreq(len(audio), 1 / sr)
+    # Audio yang sudah bersih (umumnya audio meeting digital) dibiarkan apa adanya.
+    power = np.abs(spectrum) ** 2
+    if power[freqs < cutoff].sum() < RUMBLE_SHARE * power.sum():
+        return audio
+    # Transisi halus (cosinus) 60-100 Hz agar tidak menimbulkan dering.
+    low, high = cutoff * 0.75, cutoff * 1.25
+    ramp = np.clip((freqs - low) / (high - low), 0.0, 1.0)
+    spectrum *= 0.5 - 0.5 * np.cos(np.pi * ramp)
+    return np.fft.irfft(spectrum, n=len(audio)).astype(np.float32)
+
+
 def normalize_loudness(audio: np.ndarray, target_rms: float = 0.1, max_gain: float = 10.0) -> np.ndarray:
     """Samakan volume ucapan ke tingkat yang nyaman untuk Whisper.
 
@@ -404,7 +429,7 @@ class Transcriber:
 
     def transcribe_chunk(self, chunk: np.ndarray, offset: float = 0.0) -> list[Segment]:
         """Transkripsi satu potongan (tanpa membersihkan); waktu dihitung dari awal rekaman."""
-        condensed = Condensed(chunk)
+        condensed = Condensed(remove_rumble(chunk))
         if condensed.seconds < 0.5:
             return []
         audio = normalize_loudness(condensed.audio)

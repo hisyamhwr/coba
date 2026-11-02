@@ -64,12 +64,59 @@ final class AppState: ObservableObject {
     }
 }
 
-/// Data yang berubah cepat selama rapat.
+/// Data yang berubah cepat selama rapat, dipecah per jenis. Masing-masing objek hanya diamati komponen kecil
+/// yang memakainya: level suara (±10x per detik) tidak lagi ikut menggambar ulang dan menata ulang teks
+/// transkrip live tiga baris, dan teks baru tidak menggambar ulang equalizer.
 @MainActor
-final class LiveMeter: ObservableObject {
-    @Published var level: Float = 0
-    @Published var elapsed: TimeInterval = 0
-    @Published var liveText = ""
+final class LiveMeter {
+    let audio = AudioLevels()
+    let clock = RecordingClock()
+    let caption = LiveCaption()
+
+    /// Level campuran 0...1 (equalizer pulau ringkas, cahaya).
+    var level: Float {
+        get { audio.level }
+        set { if audio.level != newValue { audio.level = newValue } }
+    }
+
+    var elapsed: TimeInterval {
+        get { clock.elapsed }
+        set { if clock.elapsed != newValue { clock.elapsed = newValue } }
+    }
+
+    var liveText: String {
+        get { caption.committed }
+        set { if caption.committed != newValue { caption.committed = newValue } }
+    }
+
     /// Kata-kata yang masih dikenali (belum final), ditampilkan dengan warna aksen.
-    @Published var livePartial = ""
+    var livePartial: String {
+        get { caption.partial }
+        set { if caption.partial != newValue { caption.partial = newValue } }
+    }
+
+    /// Level per jalur: suara kita (mic) dan suara peserta (audio meeting).
+    func setLevels(mic: Float, system: Float) {
+        if audio.mic != mic { audio.mic = mic }
+        if audio.system != system { audio.system = system }
+        level = max(mic, system)
+    }
+}
+
+@MainActor
+final class AudioLevels: ObservableObject {
+    @Published var level: Float = 0
+    @Published var mic: Float = 0
+    @Published var system: Float = 0
+}
+
+@MainActor
+final class RecordingClock: ObservableObject {
+    @Published var elapsed: TimeInterval = 0
+}
+
+@MainActor
+final class LiveCaption: ObservableObject {
+    @Published var committed = ""
+    @Published var partial = ""
 }

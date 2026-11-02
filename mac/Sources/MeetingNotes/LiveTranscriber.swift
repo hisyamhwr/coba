@@ -1,4 +1,3 @@
-import Accelerate
 import AVFoundation
 import Speech
 
@@ -18,6 +17,8 @@ final class LiveTranscriber {
     private let onText: (Caption) -> Void
     /// Istilah dari kamus (mis. FE, deploy, flagging) agar pengenal suara lebih tepat menangkap istilah teknis.
     private let terms: [String]
+    /// Koreksi salah dengar (mis. "legging" → "flagging"), diterapkan sebelum teks ditampilkan.
+    private let corrections: LiveCorrections
     /// Catatan untuk rekaman.log (izin, error pengenal suara).
     var onLog: ((String) -> Void)?
     private let lock = NSLock()
@@ -48,8 +49,9 @@ final class LiveTranscriber {
     private var rotating = false
     private let rotateQueue = DispatchQueue(label: "meetingnotes.live-rotate")
 
-    init(terms: [String] = [], onText: @escaping (Caption) -> Void) {
+    init(terms: [String] = [], corrections: [(String, String)] = [], onText: @escaping (Caption) -> Void) {
         self.terms = Array(terms.prefix(100))
+        self.corrections = LiveCorrections(corrections)
         self.onText = onText
     }
 
@@ -82,12 +84,9 @@ final class LiveTranscriber {
         oldTask?.cancel()
     }
 
-    /// Dipanggil dari thread audio dengan potongan 16 kHz mono.
-    func append(_ buffer: AVAudioPCMBuffer) {
-        var rms: Float = 0
-        if let data = buffer.floatChannelData {
-            vDSP_rmsqv(data[0], 1, &rms, vDSP_Length(buffer.frameLength))
-        }
+    /// Dipanggil dari thread audio dengan potongan 16 kHz mono yang sudah dikuatkan otomatis. `rms` adalah
+    /// level asli sebelum dikuatkan, untuk mendeteksi jeda bicara (derau yang ikut dikuatkan tidak dikira suara).
+    func append(_ buffer: AVAudioPCMBuffer, rms: Float) {
         lock.lock()
         request?.append(buffer)
         let age = DispatchTime.now().uptimeNanoseconds - sessionStart
@@ -197,8 +196,10 @@ final class LiveTranscriber {
             }
             // Simpan secukupnya saja; yang ditampilkan hanya 2-3 baris terakhir.
             if self.committed.count > 600 { self.committed = String(self.committed.suffix(400)) }
-            let caption = Caption(committed: self.committed.trimmingCharacters(in: .whitespaces),
-                                  partial: (self.carried + " " + self.partial).trimmingCharacters(in: .whitespaces))
+            let caption = Caption(
+                committed: self.corrections.apply(self.committed.trimmingCharacters(in: .whitespaces)),
+                partial: self.corrections.apply((self.carried + " " + self.partial).trimmingCharacters(in: .whitespaces))
+            )
             // Hasil akhir selalu dikirim; hasil sementara dibatasi agar UI tidak digambar ulang tiap kata.
             let now = DispatchTime.now().uptimeNanoseconds
             let isFinal = result?.isFinal ?? true
@@ -236,5 +237,53 @@ final class LiveTranscriber {
             self.lock.unlock()
             if let caption { self.onText(caption) }
         }
+    }
+}
+
+/// Koreksi salah dengar untuk transkrip live, dengan aturan yang sama seperti koreksi di notulen (Python):
+/// cocok per kata utuh, tidak peduli huruf besar/kecil, kecuali koreksi yang memang hanya mengubah kapitalisasi.
+struct LiveCorrections {
+    private let rules: [(NSRegularExpression, String)]
+
+    init(_ pairs: [(String, String)]) {
+        rules = pairs.prefix(400).compactMap { pair -> (NSRegularExpression, String)? in
+            let (wrong, correct) = pair
+            guard !wrong.isEmpty, wrong != correct else { return nil }
+            var pattern = NSRegularExpression.escapedPattern(for: wrong)
+            if wrong.first.map({ $0.isLetter || $0.isNumber }) == true { pattern = "\\b" + pattern }
+            if wrong.last.map({ $0.isLetter || $0.isNumber }) == true { pattern += "\\b" }
+            let caseOnly = wrong.lowercased() == correct.lowercased()
+            guard let regex = try? NSRegularExpression(pattern: pattern, options: caseOnly ? [] : [.caseInsensitive])
+            else { return nil }
+            return (regex, NSRegularExpression.escapedTemplate(for: correct))
+        }
+    }
+
+    func apply(_ text: String) -> String {
+        guard !rules.isEmpty, !text.isEmpty else { return text }
+        var result = text
+        for (regex, template) in rules {
+            let range = NSRange(result.startIndex..., in: result)
+            result = regex.stringByReplacingMatches(in: result, range: range, withTemplate: template)
+        }
+        return result
+    }
+
+    /// Baca file "salah => benar" (koreksi dari MoM sebelumnya dan koreksi bawaan).
+    static func load(from urls: [URL]) -> [(String, String)] {
+        var seen = Set<String>()
+        var pairs: [(String, String)] = []
+        for url in urls {
+            let text = (try? String(contentsOf: url, encoding: .utf8)) ?? ""
+            for line in text.split(separator: "\n") where !line.hasPrefix("#") {
+                let parts = line.components(separatedBy: "=>")
+                guard parts.count == 2 else { continue }
+                let wrong = parts[0].trimmingCharacters(in: .whitespaces)
+                let correct = parts[1].trimmingCharacters(in: .whitespaces)
+                guard !wrong.isEmpty, !correct.isEmpty, seen.insert(wrong.lowercased()).inserted else { continue }
+                pairs.append((wrong, correct))
+            }
+        }
+        return pairs
     }
 }

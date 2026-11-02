@@ -2,6 +2,34 @@
 
 Format versi: `MAYOR.FITUR.PERBAIKAN` (lihat [docs/ROADMAP.md](docs/ROADMAP.md)).
 
+## 3.1.0
+
+Tangkapan suara, transkrip live, dan UI lebih baik, memakai skill `swiftui-expert-skill`,
+`swiftui-design-skill`, dan `macos-design-guidelines`. Tetap 100% lokal dan gratis.
+
+**Tangkapan suara**
+- Musik dari Spotify, Apple Music, Podcasts, dan TV tidak lagi ikut terekam sebagai "suara meeting".
+- Konversi 48 kHz → 16 kHz memakai kualitas tertinggi (konsonan s/f/t lebih jelas untuk transkripsi).
+- Filter dengung (< 80 Hz: AC, kipas, meja terketuk) sebelum Whisper, hanya bila dengungnya signifikan; audio
+  yang sudah bersih tidak diubah. Deteksi bicara dan penguat suara pelan jadi lebih tepat di ruangan bising.
+
+**Transkrip live**
+- Penguat otomatis per jalur untuk pengenal suara: suara peserta yang pelan dan suaramu yang jauh dari mic
+  dikuatkan ke level yang sama, lalu dicampur (file rekaman tetap asli). Saat peserta bicara lewat speaker,
+  mic tidak dikuatkan banyak agar gemanya tidak menumpuk.
+- Deteksi jeda untuk ganti sesi memakai level asli, sehingga derau yang ikut dikuatkan tidak dikira suara.
+- Koreksi salah dengar: koreksi yang dibuat Claude di setiap MoM (mis. legging → flagging) disimpan di
+  `~/MeetingNotes/koreksi.txt` dan langsung dipakai membetulkan transkrip live rapat berikutnya, ditambah
+  koreksi bawaan (`meeting_notes/koreksi_dasar.txt`). Makin sering dipakai, makin tepat.
+
+**UI & animasi**
+- Lebih mulus: level suara, timer, dan teks live dipisah ke objek masing-masing. Sebelumnya setiap perubahan
+  level suara (±10x per detik) ikut menata ulang teks transkrip live tiga baris.
+- Chip jalur suara baru saat merekam: **mic** (kuning) dan **peserta** (mint) menyala mengikuti suara, jadi
+  langsung terlihat bila suara meeting atau mic tidak masuk.
+- Status memproses memakai warna identitas hangat (kuning-oranye-pink) menggantikan gradien biru-ungu.
+- Identitas `ForEach` yang stabil (konfeti, equalizer) sesuai panduan SwiftUI.
+
 ## 3.0.0
 
 Siap untuk rapat panjang (1 jam lebih): audit menyeluruh, perbaikan bug, dan peningkatan akurasi. Tetap 100%

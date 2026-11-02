@@ -1,0 +1,17 @@
+# Koreksi bawaan untuk transkrip live (pengenal suara Apple), format: salah => benar.
+# Hanya salah dengar yang hampir pasti salah dalam rapat produk/IT. Koreksi yang dipelajari dari MoM
+# disimpan terpisah di ~/MeetingNotes/koreksi.txt.
+legging => flagging
+fleging => flagging
+flaging => flagging
+front end => frontend
+back end => backend
+ui ux => UI/UX
+u i u x => UI/UX
+fitur flag => feature flag
+pul request => pull request
+u a t => UAT
+s i t => SIT
+bri mo => BRImo
+brimo => BRImo
+britama => BritAma

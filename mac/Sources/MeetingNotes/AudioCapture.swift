@@ -30,9 +30,16 @@ final class AudioCapture: NSObject, SCStreamOutput, SCStreamDelegate {
     /// Campuran mic + meeting dikecilkan sedikit agar tidak pecah (clipping) saat keduanya keras bersamaan.
     private static let mixGain: Float = 0.8
 
-    /// Potongan campuran 16 kHz mono, untuk transkrip live.
-    var onSamples: ((AVAudioPCMBuffer) -> Void)?
-    var onLevel: ((Float) -> Void)?
+    /// Musik/video dari aplikasi ini tidak ikut terekam sebagai "suara meeting" (mengacaukan transkripsi).
+    private static let excludedApps: Set<String> = [
+        "com.apple.Music", "com.spotify.client", "com.apple.podcasts", "com.apple.TV",
+    ]
+
+    /// Potongan campuran 16 kHz mono untuk transkrip live, beserta RMS asli (sebelum dikuatkan) untuk deteksi
+    /// jeda bicara. Campuran ini dikuatkan otomatis per jalur; file rekaman tetap asli.
+    var onSamples: ((AVAudioPCMBuffer, Float) -> Void)?
+    /// Level 0...1 per jalur: mic (suara kita) dan audio meeting (peserta online).
+    var onLevels: ((_ mic: Float, _ system: Float) -> Void)?
     /// Masalah yang terdeteksi saat merekam (mis. mic hanya memberi hening total), untuk ditampilkan di pulau.
     var onProblem: ((String) -> Void)?
     private(set) var micName = ""
@@ -53,7 +60,11 @@ final class AudioCapture: NSObject, SCStreamOutput, SCStreamDelegate {
     /// Audio sistem sedang dipakai (cadangan sudah terisi); kembali false saat antrean habis (meeting hening).
     private var systemFlowing = false
     private var writeFailed = false
-    private var lastLevel: Float = 0
+    private var lastMicLevel: Float = 0
+    private var lastSystemLevel: Float = 0
+    /// Penguat otomatis umpan transkrip live, satu per jalur (hanya dipakai di thread audio mic).
+    private var micLeveler = Leveler()
+    private var systemLeveler = Leveler()
     private var running = false
     private var configObserver: NSObjectProtocol?
     // Diagnostik (ditulis ke rekaman.log): membedakan mic tanpa izin, mic pelan, dan audio sistem yang tidak masuk.
@@ -296,6 +307,21 @@ final class AudioCapture: NSObject, SCStreamOutput, SCStreamDelegate {
               let systemOut = Self.makeBuffer(systemTrack)
         else { return }
 
+        // Umpan transkrip live: tiap jalur dikuatkan ke level yang stabil lalu dicampur, sehingga suara peserta
+        // yang pelan dan suara kita yang jauh dari mic sama-sama terdengar jelas oleh pengenal suara.
+        var micRMS: Float = 0
+        vDSP_rmsqv(mic, 1, &micRMS, vDSP_Length(mic.count))
+        var systemRMS: Float = 0
+        if !system.isEmpty { vDSP_rmsqv(system, 1, &systemRMS, vDSP_Length(system.count)) }
+        // Saat peserta bicara lewat speaker, mic ikut menangkap gemanya: mic tidak dikuatkan banyak agar gema
+        // tidak menumpuk di atas suara asli.
+        let liveMic = micLeveler.process(mic, maxGain: systemRMS > Leveler.floor ? 2 : Leveler.maxGain)
+        let liveSystem = systemLeveler.process(systemTrack, maxGain: Leveler.maxGain)
+        var liveMix = liveMic
+        for i in 0..<liveMix.count {
+            liveMix[i] = Leveler.limit(liveMix[i] + liveSystem[i])
+        }
+
         writeQueue.async { [weak self] in
             guard let self else { return }
             do {
@@ -310,23 +336,29 @@ final class AudioCapture: NSObject, SCStreamOutput, SCStreamDelegate {
                 self.onProblem?("Rekaman gagal disimpan (disk penuh?). Kosongkan ruang disk lalu mulai rekam lagi.")
             }
         }
-        onSamples?(out)
-        var rms: Float = 0
-        vDSP_rmsqv(mixed, 1, &rms, vDSP_Length(mixed.count))
-        let level = min(rms * 8, 1)
+        if let onSamples, let liveOut = Self.makeBuffer(liveMix) {
+            var rms: Float = 0
+            vDSP_rmsqv(mixed, 1, &rms, vDSP_Length(mixed.count))
+            onSamples(liveOut, rms)
+        }
+        let micLevel = min(micRMS * 8, 1)
+        let systemLevel = min(systemRMS * 8, 1)
         // Kirim ke UI hanya bila berubah cukup terlihat, agar tidak menggambar ulang tanpa perlu.
-        if abs(level - lastLevel) > 0.03 {
-            lastLevel = level
-            onLevel?(level)
+        if abs(micLevel - lastMicLevel) > 0.03 || abs(systemLevel - lastSystemLevel) > 0.03 {
+            lastMicLevel = micLevel
+            lastSystemLevel = systemLevel
+            onLevels?(micLevel, systemLevel)
         }
     }
 
     // MARK: - Audio sistem lewat ScreenCaptureKit
 
     private func startSystemAudio() async throws {
-        let content = try await SCShareableContent.excludingDesktopWindows(false, onScreenWindowsOnly: true)
+        // Semua aplikasi (termasuk yang jendelanya tersembunyi), agar pemutar musik di latar ikut dikecualikan.
+        let content = try await SCShareableContent.excludingDesktopWindows(false, onScreenWindowsOnly: false)
         guard let display = content.displays.first else { throw CaptureError.noDisplay }
-        let filter = SCContentFilter(display: display, excludingApplications: [], exceptingWindows: [])
+        let excluded = content.applications.filter { Self.excludedApps.contains($0.bundleIdentifier) }
+        let filter = SCContentFilter(display: display, excludingApplications: excluded, exceptingWindows: [])
         let config = SCStreamConfiguration()
         config.capturesAudio = true
         config.excludesCurrentProcessAudio = true
@@ -408,6 +440,8 @@ final class AudioCapture: NSObject, SCStreamOutput, SCStreamDelegate {
     private static func makeConverter(from format: AVAudioFormat) -> AVAudioConverter? {
         let converter = AVAudioConverter(from: format, to: Self.format)
         converter?.downmix = true
+        // Kualitas tertinggi saat menurunkan 48 kHz ke 16 kHz: konsonan (s, f, t) tetap jelas, tanpa aliasing.
+        converter?.sampleRateConverterQuality = AVAudioQuality.max.rawValue
         return converter
     }
 
@@ -454,5 +488,45 @@ final class AudioCapture: NSObject, SCStreamOutput, SCStreamDelegate {
         buffer.frameLength = AVAudioFrameCount(samples.count)
         samples.withUnsafeBufferPointer { data[0].update(from: $0.baseAddress!, count: samples.count) }
         return buffer
+    }
+}
+
+/// Penguat otomatis (AGC) sederhana untuk umpan transkrip live. Suara pelan dikuatkan sampai `maxGain` kali,
+/// suara keras diturunkan; hening dan derau di bawah `floor` tidak ikut dikuatkan.
+struct Leveler {
+    static let target: Float = 0.08
+    static let maxGain: Float = 8
+    static let minGain: Float = 0.5
+    static let floor: Float = 0.004
+
+    private(set) var gain: Float = 1
+
+    mutating func process(_ samples: [Float], maxGain: Float) -> [Float] {
+        guard !samples.isEmpty else { return samples }
+        var rms: Float = 0
+        vDSP_rmsqv(samples, 1, &rms, vDSP_Length(samples.count))
+        let start = gain
+        if rms > Self.floor {
+            let desired = min(max(Self.target / rms, Self.minGain), maxGain)
+            // Turun cepat agar tidak pecah, naik pelan agar derau tidak "memompa".
+            gain += (desired - gain) * (desired < gain ? 0.5 : 0.08)
+        } else if gain > maxGain {
+            gain = maxGain
+        }
+        // Gain berubah bertahap di sepanjang potongan agar tidak terdengar klik.
+        let step = (gain - start) / Float(samples.count)
+        var out = samples
+        for i in 0..<out.count {
+            out[i] *= start + step * Float(i)
+        }
+        return out
+    }
+
+    /// Pembatas lembut: di bawah 0,9 tidak berubah, di atasnya ditekuk halus menuju 1 (tanpa pecah).
+    static func limit(_ x: Float) -> Float {
+        let magnitude = abs(x)
+        guard magnitude > 0.9 else { return x }
+        let bent = 0.9 + 0.1 * tanh((magnitude - 0.9) / 0.1)
+        return x < 0 ? -bent : bent
     }
 }

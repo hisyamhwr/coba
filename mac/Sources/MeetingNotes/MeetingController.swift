@@ -42,8 +42,9 @@ final class MeetingController {
         }
 
         // Transkrip live opsional (menu bar) karena pengenal suara memakai CPU selama rapat.
-        let live: LiveTranscriber? = state.liveTranscript ? LiveTranscriber(terms: Self.glossaryTerms()) {
-            [weak self] caption in
+        let live: LiveTranscriber? = state.liveTranscript ? LiveTranscriber(
+            terms: Self.glossaryTerms(), corrections: Self.liveCorrections()
+        ) { [weak self] caption in
             Task { @MainActor in
                 guard let self else { return }
                 if self.meter.liveText != caption.committed { self.meter.liveText = caption.committed }
@@ -52,9 +53,9 @@ final class MeetingController {
         } : nil
         let capture = AudioCapture(output: dir.appendingPathComponent("meeting.wav"))
         live?.onLog = { line in capture.note(line) }
-        capture.onSamples = live.map { transcriber in { buffer in transcriber.append(buffer) } }
-        capture.onLevel = { [weak self] level in
-            Task { @MainActor in self?.meter.level = level }
+        capture.onSamples = live.map { transcriber in { buffer, rms in transcriber.append(buffer, rms: rms) } }
+        capture.onLevels = { [weak self] mic, system in
+            Task { @MainActor in self?.meter.setLevels(mic: mic, system: system) }
         }
         capture.onProblem = { [weak self] message in
             Task { @MainActor in self?.state.warning = message }
@@ -90,7 +91,7 @@ final class MeetingController {
             self.state.warning = nil
             self.state.marks = []
             self.meter.elapsed = 0
-            self.meter.level = 0
+            self.meter.setLevels(mic: 0, system: 0)
             self.meter.liveText = live == nil ? "Transkrip live dimatikan (hemat baterai)." : ""
             self.meter.livePartial = ""
             self.state.result = nil
@@ -138,6 +139,14 @@ final class MeetingController {
         .filter { seen.insert($0.lowercased()).inserted }
     }
 
+    /// Koreksi salah dengar yang dipelajari dari MoM sebelumnya (~/MeetingNotes/koreksi.txt) lalu koreksi bawaan.
+    private static func liveCorrections() -> [(String, String)] {
+        LiveCorrections.load(from: [
+            Config.outputDir.appendingPathComponent("koreksi.txt"),
+            URL(fileURLWithPath: Config.repoPath).appendingPathComponent("meeting_notes/koreksi_dasar.txt"),
+        ])
+    }
+
     func markImportant() {
         guard state.phase == .recording, let capture else { return }
         // Jam audio: tetap cocok dengan rekaman walau Mac sempat tidur atau mic sempat terputus.
@@ -152,7 +161,7 @@ final class MeetingController {
         capture.stop()
         worker?.stop()
         worker = nil
-        meter.level = 0
+        meter.setLevels(mic: 0, system: 0)
         self.capture = nil
         self.live = nil
 

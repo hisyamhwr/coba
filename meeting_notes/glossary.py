@@ -9,7 +9,14 @@ import re
 from pathlib import Path
 
 MAX_TERMS = 300
+MAX_CORRECTIONS = 300
 BASE_PATH = Path(__file__).with_name("kamus_dasar.txt")
+CORRECTIONS_FILE = "koreksi.txt"
+BASE_CORRECTIONS_PATH = Path(__file__).with_name("koreksi_dasar.txt")
+CORRECTIONS_HEADER = (
+    "# Koreksi salah dengar yang dipelajari dari MoM (format: salah => benar), terbaru di atas.\n"
+    "# Dipakai aplikasi Mac untuk membetulkan transkrip live. Boleh diedit atau dihapus manual.\n"
+)
 HEADER = (
     "# Kamus istilah Meeting Notes. Diperbarui otomatis setiap rapat; istilah terbaru di atas.\n"
     "# Boleh ditambah atau dihapus manual, satu istilah per baris.\n"
@@ -23,12 +30,28 @@ def _read_terms(path: Path) -> list[str]:
     return _dedupe(line.strip() for line in lines if line.strip() and not line.startswith("#"))
 
 
+def read_corrections(path: Path) -> list[tuple[str, str]]:
+    """Baris "salah => benar"; baris lain diabaikan."""
+    if not path.exists():
+        return []
+    pairs = []
+    for line in path.read_text(encoding="utf-8").splitlines():
+        if line.startswith("#") or "=>" not in line:
+            continue
+        wrong, correct = (part.strip() for part in line.split("=>", 1))
+        if wrong and correct:
+            pairs.append((wrong, correct))
+    return pairs
+
+
 class Glossary:
     def __init__(self, path: Path, base_path: Path | None = BASE_PATH):
         self.path = path
         # Istilah yang dipelajari dari rapat-rapatmu (disimpan); kamus dasar hanya dibaca.
         self.terms = _read_terms(path)
         self.base_terms = _read_terms(base_path) if base_path else []
+        self.corrections_path = path.with_name(CORRECTIONS_FILE)
+        self.corrections = read_corrections(self.corrections_path)
 
     @property
     def all_terms(self) -> list[str]:
@@ -38,9 +61,31 @@ class Glossary:
     def merge(self, new_terms: list[str]) -> None:
         self.terms = _dedupe([t.strip() for t in new_terms if t.strip()] + self.terms)[:MAX_TERMS]
 
+    def learn_corrections(self, pairs: list[tuple[str, str]]) -> None:
+        """Simpan koreksi salah dengar dari MoM (terbaru di atas) untuk transkrip live rapat berikutnya.
+
+        Dilewati: koreksi sangat pendek (< 3 huruf, terlalu mudah salah cocok dengan kata lain) dan koreksi yang
+        hanya menyisipkan kata ("ke vendor" -> "ke vendor VoIP"), karena bisa menggandakan kata yang sudah benar.
+        """
+        def learnable(wrong: str, correct: str) -> bool:
+            if len(wrong) < 3 or not correct or wrong == correct:
+                return False
+            return wrong.casefold() == correct.casefold() or wrong.casefold() not in correct.casefold()
+
+        new = [(w.strip(), c.strip()) for w, c in pairs if learnable(w.strip(), c.strip())]
+        seen, merged = set(), []
+        for wrong, correct in new + self.corrections:
+            if wrong.casefold() not in seen:
+                seen.add(wrong.casefold())
+                merged.append((wrong, correct))
+        self.corrections = merged[:MAX_CORRECTIONS]
+
     def save(self) -> None:
         self.path.parent.mkdir(parents=True, exist_ok=True)
         self.path.write_text(HEADER + "\n".join(self.terms) + "\n", encoding="utf-8")
+        if self.corrections:
+            lines = "\n".join(f"{wrong} => {correct}" for wrong, correct in self.corrections)
+            self.corrections_path.write_text(CORRECTIONS_HEADER + lines + "\n", encoding="utf-8")
 
     def whisper_hint(self, max_chars: int = 400) -> str:
         """Istilah teratas yang muat di prompt Whisper (dibatasi +-224 token)."""

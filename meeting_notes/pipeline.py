@@ -231,6 +231,7 @@ def process_recording(
                 corrections[key] = corrections.get(key, 0) + n
         paragraphs = fixed
         glossary.merge(summary.glossary_terms)
+        glossary.learn_corrections(pairs)
         glossary.save()
 
     note = " ".join(n for n in (engine_note, note) if n) or None

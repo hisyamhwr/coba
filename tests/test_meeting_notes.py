@@ -9,7 +9,7 @@ from docx import Document
 
 from meeting_notes.config import Settings
 from meeting_notes.exporter import MeetingInfo, render_markdown, write_docx
-from meeting_notes.glossary import Glossary, apply_corrections
+from meeting_notes.glossary import BASE_CORRECTIONS_PATH, Glossary, apply_corrections, read_corrections
 from meeting_notes.pipeline import process_recording
 from meeting_notes.recorder import mix_tracks
 from meeting_notes import summarizer as summarizer_module
@@ -29,6 +29,7 @@ from meeting_notes.transcriber import (
     clean_segments,
     collapse_repeats,
     normalize_loudness,
+    remove_rumble,
     Condensed,
     format_timestamp,
     merge_tracks,
@@ -155,7 +156,9 @@ class FakeEngine:
 def test_transcriber_offsets_chunks_and_skips_silence():
     transcriber = Transcriber(engine="faster-whisper", chunk_seconds=2)
     transcriber.engine = FakeEngine()
-    audio = np.concatenate([np.full(32000, 0.1), np.zeros(32000), np.full(16000, 0.1)]).astype("float32")
+    # "Ucapan" berupa nada 300 Hz (RMS 0,1); DC konstan tidak dipakai karena dibuang filter dengung.
+    tone = lambda n: 0.1 * np.sqrt(2) * np.sin(2 * np.pi * 300 * np.arange(n) / 16000)
+    audio = np.concatenate([tone(32000), np.zeros(32000), tone(16000)]).astype("float32")
     progress = []
     segments = transcriber.transcribe(audio, progress.append)
     # Potongan: [0-1.05s] [1.05-2.1s] [2.1-3.15s sunyi, dilewati] [3.15-5s]
@@ -370,6 +373,36 @@ def test_pipeline_applies_corrections_and_updates_glossary(tmp_path, monkeypatch
     assert seen["glossary"][0] == "Daily Banking" and "setor tunai" in seen["glossary"]
     assert transcriber.vocabulary.startswith("Daily Banking, frontend")
     assert Glossary(settings.glossary_path).terms == ["VoIP", "Daily Banking"]
+    # Koreksi yang hanya menyisipkan kata tidak dipelajari untuk transkrip live (bisa menggandakan "VoIP").
+    assert Glossary(settings.glossary_path).corrections == []
+
+
+def test_learn_corrections_newest_first_and_skips_short(tmp_path):
+    glossary = Glossary(tmp_path / "kamus.txt", base_path=None)
+    glossary.learn_corrections([("legging", "flagging"), ("fe", "FE"), ("same", "same"), ("voip", "VoIP"),
+                                ("ke vendor", "ke vendor VoIP")])
+    glossary.learn_corrections([("Legging", "flagging"), ("di repost", "di-deploy")])
+    glossary.save()
+    expected = [("Legging", "flagging"), ("di repost", "di-deploy"), ("voip", "VoIP")]
+    assert read_corrections(tmp_path / "koreksi.txt") == expected
+    assert Glossary(tmp_path / "kamus.txt").corrections == expected
+
+
+def test_base_corrections_file_is_valid():
+    pairs = read_corrections(BASE_CORRECTIONS_PATH)
+    assert ("legging", "flagging") in pairs
+    assert all(wrong.casefold() != correct.casefold() or wrong != correct for wrong, correct in pairs)
+
+
+def test_remove_rumble_keeps_speech_band():
+    t = np.arange(16000 * 2) / 16000
+    hum = 0.3 * np.sin(2 * np.pi * 50 * t)
+    voice = 0.1 * np.sin(2 * np.pi * 300 * t)
+    out = remove_rumble((hum + voice + 0.05).astype(np.float32))
+    assert out.dtype == np.float32
+    assert np.abs(out - voice).max() < 0.01
+    clean = voice.astype(np.float32)
+    assert remove_rumble(clean) is clean
 
 
 def test_summarizer_request(monkeypatch):

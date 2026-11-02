@@ -10,20 +10,23 @@ private enum Palette {
     static let yellow = Color(red: 1.0, green: 0.84, blue: 0.04)   // #FFD60A
     static let green = Color(red: 0.19, green: 0.82, blue: 0.35)   // #30D158 selesai
     static let mint = Color(red: 0.4, green: 0.83, blue: 0.81)     // #66D4CF
-    static let blue = Color(red: 0.04, green: 0.52, blue: 1.0)     // #0A84FF memproses
-    static let purple = Color(red: 0.75, green: 0.35, blue: 0.95)  // #BF5AF2 memproses (AI)
+    static let blue = Color(red: 0.04, green: 0.52, blue: 1.0)     // #0A84FF Word, tugas
     static let pink = Color(red: 1.0, green: 0.22, blue: 0.56)     // #FF375F
     static let chip = Color.white.opacity(0.1)
     static let secondary = Color.white.opacity(0.72)               // teks transkrip yang sudah final
     static let muted = Color.white.opacity(0.55)                   // ±6:1 di atas hitam
 
     static let record = LinearGradient(colors: [pink, red, orange], startPoint: .leading, endPoint: .trailing)
-    static let process = LinearGradient(colors: [blue, purple, pink], startPoint: .leading, endPoint: .trailing)
+    /// Memproses memakai warna identitas yang sama (hangat), bukan gradien biru-ungu yang terkesan generik.
+    static let process = LinearGradient(colors: [yellow, orange, pink], startPoint: .leading, endPoint: .trailing)
     static let done = LinearGradient(colors: [green, mint], startPoint: .leading, endPoint: .trailing)
     static let brand = LinearGradient(colors: [pink, orange, yellow], startPoint: .topLeading, endPoint: .bottomTrailing)
     static let partial = LinearGradient(colors: [yellow, orange], startPoint: .leading, endPoint: .trailing)
-    /// Warna batang equalizer dan konfeti.
-    static let confetti: [Color] = [pink, orange, yellow, green, blue, purple]
+    /// Warna konfeti saat MoM siap.
+    static let confetti: [Color] = [pink, orange, yellow, green, mint, red]
+    /// Warna per jalur suara: kuning = suara kita (mic), mint = peserta online (audio meeting).
+    static let micSource = yellow
+    static let meetingSource = mint
 }
 
 /// Tipografi: SF Pro untuk teks (ringan, mudah dibaca), SF Pro Rounded untuk angka dan judul (ramah, ceria).
@@ -150,12 +153,12 @@ struct IslandView: View {
             Glow(color: Palette.pink, strength: state.expanded ? 0.35 : (hovering ? 0.25 : 0))
         case .recording:
             if state.expanded {
-                LevelGlow(meter: meter)
+                LevelGlow(audio: meter.audio)
             } else {
                 Glow(color: Palette.red, strength: 0.22, center: .leading, radius: 130)
             }
         case .processing:
-            Glow(color: Palette.purple, strength: 0.4)
+            Glow(color: Palette.orange, strength: 0.38)
         case .done:
             Glow(color: Palette.green, strength: 0.4)
         case .failed:
@@ -255,7 +258,7 @@ struct IslandView: View {
     private var recordingCompact: some View {
         HStack(spacing: 8) {
             RecordingDot()
-            ElapsedText(meter: meter, size: 13)
+            ElapsedText(clock: meter.clock, size: 13)
             Spacer()
             if !state.marks.isEmpty {
                 Label("\(state.marks.count)", systemImage: "star.fill")
@@ -264,7 +267,7 @@ struct IslandView: View {
                     .contentTransition(.numericText())
                     .transition(.scale.combined(with: .opacity))
             }
-            EqualizerBars(meter: meter, height: 14)
+            EqualizerBars(audio: meter.audio, height: 14)
         }
         .animation(Liquid.pop, value: state.marks.count)
         .frame(maxWidth: .infinity, maxHeight: .infinity)
@@ -278,12 +281,15 @@ struct IslandView: View {
         VStack(alignment: .leading, spacing: 10) {
             HStack(spacing: 8) {
                 RecordingDot()
-                ElapsedText(meter: meter, size: 15)
+                ElapsedText(clock: meter.clock, size: 15)
                 Spacer()
-                EqualizerBars(meter: meter, height: 18)
+                // Dua jalur yang direkam, masing-masing menyala saat ada suara: langsung terlihat bila suara
+                // meeting atau mic tidak masuk.
+                SourceChip(audio: meter.audio, source: .mic)
+                SourceChip(audio: meter.audio, source: .meeting)
                 iconButton("chevron.up", help: "Perkecil", action: collapse)
             }
-            LiveText(meter: meter)
+            LiveText(caption: meter.caption)
             if let warning = state.warning {
                 Label(warning, systemImage: "exclamationmark.triangle.fill")
                     .font(.system(size: 10, weight: .regular))
@@ -613,15 +619,22 @@ private struct Confetti: View {
     @State private var burst = false
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
-    private static let pieces: [(angle: Double, distance: Double, spin: Double)] = (0..<14).map { i in
-        (angle: Double(i) / 14 * 360 + Double(i % 3) * 9, distance: Double(26 + (i * 7) % 22),
-         spin: Double((i * 53) % 270) - 135)
+    private struct Piece: Identifiable {
+        let id: Int
+        let angle: Double
+        let distance: Double
+        let spin: Double
+    }
+
+    private static let pieces: [Piece] = (0..<14).map { i in
+        Piece(id: i, angle: Double(i) / 14 * 360 + Double(i % 3) * 9, distance: Double(26 + (i * 7) % 22),
+              spin: Double((i * 53) % 270) - 135)
     }
 
     var body: some View {
         ZStack {
-            ForEach(Self.pieces.indices, id: \.self) { i in
-                let piece = Self.pieces[i]
+            ForEach(Self.pieces) { piece in
+                let i = piece.id
                 let radians = piece.angle * .pi / 180
                 RoundedRectangle(cornerRadius: 1)
                     .fill(Palette.confetti[i % Palette.confetti.count])
@@ -705,18 +718,18 @@ private struct Glow: View {
 
 /// Cahaya merah-oranye yang menguat saat ada suara (lewat opacity, tanpa menggambar ulang gradien).
 private struct LevelGlow: View {
-    @ObservedObject var meter: LiveMeter
+    @ObservedObject var audio: AudioLevels
 
     var body: some View {
         RadialGradient(colors: [Palette.red, Palette.orange.opacity(0.25), .clear],
                        center: .top, startRadius: 0, endRadius: 260)
-            .opacity(0.22 + Double(meter.level) * 0.45)
-            .animation(.easeOut(duration: 0.18), value: meter.level)
+            .opacity(0.22 + Double(audio.level) * 0.45)
+            .animation(.easeOut(duration: 0.18), value: audio.level)
             .allowsHitTesting(false)
     }
 }
 
-/// Garis tepi bergradien biru-ungu-pink saat Claude memproses (gaya "AI sedang bekerja"). Gradiennya statis;
+/// Garis tepi bergradien kuning-oranye-pink saat Claude memproses ("AI sedang bekerja"). Gradiennya statis;
 /// yang beranimasi hanya opacity lapisannya, sehingga GPU tidak perlu menggambar ulang gradien tiap frame.
 private struct Aura: View {
     let shape: UnevenRoundedRectangle
@@ -725,7 +738,7 @@ private struct Aura: View {
 
     var body: some View {
         shape
-            .stroke(LinearGradient(colors: [Palette.blue, Palette.purple, Palette.pink, Palette.orange],
+            .stroke(LinearGradient(colors: [Palette.yellow, Palette.orange, Palette.pink, Palette.red],
                                    startPoint: .leading, endPoint: .trailing), lineWidth: 1.5)
             .opacity(bright ? 1 : 0.45)
             .allowsHitTesting(false)
@@ -762,8 +775,9 @@ private struct ProgressBar: View {
     }
 }
 
-// MARK: - Komponen kecil yang mengamati LiveMeter
-// Hanya komponen ini yang digambar ulang saat timer, level suara, atau transkrip live berubah.
+// MARK: - Komponen kecil yang mengamati data cepat
+// Masing-masing hanya mengamati satu objek (jam, level suara, atau teks live), sehingga hanya komponen itu yang
+// digambar ulang saat datanya berubah.
 
 private func timeString(_ seconds: TimeInterval) -> String {
     let total = Int(seconds)
@@ -772,14 +786,14 @@ private func timeString(_ seconds: TimeInterval) -> String {
 }
 
 private struct ElapsedText: View {
-    @ObservedObject var meter: LiveMeter
+    @ObservedObject var clock: RecordingClock
     let size: CGFloat
 
     var body: some View {
-        Text(timeString(meter.elapsed))
+        Text(timeString(clock.elapsed))
             .font(Typo.number(size))
             .contentTransition(.numericText())
-            .animation(.snappy(duration: 0.25), value: Int(meter.elapsed))
+            .animation(.snappy(duration: 0.25), value: Int(clock.elapsed))
     }
 }
 
@@ -787,18 +801,18 @@ private struct ElapsedText: View {
 /// sehingga ucapan terakhir tidak pernah terpotong di kanan. Kata yang masih dikenali (bisa berubah) tampil
 /// dengan gradien kuning-oranye, lalu berubah putih begitu final.
 private struct LiveText: View {
-    @ObservedObject var meter: LiveMeter
+    @ObservedObject var caption: LiveCaption
 
     /// Kira-kira muat 3 baris pada lebar pulau dengan huruf 15 pt.
     private static let maxCharacters = 150
 
     var body: some View {
         Group {
-            if meter.liveText.isEmpty && meter.livePartial.isEmpty {
+            if caption.committed.isEmpty && caption.partial.isEmpty {
                 Text("Mendengarkan…").foregroundStyle(Palette.muted)
             } else {
-                let partial = meter.livePartial
-                let committed = Self.tail(meter.liveText, max(0, Self.maxCharacters - partial.count))
+                let partial = caption.partial
+                let committed = Self.tail(caption.committed, max(0, Self.maxCharacters - partial.count))
                 let gap = committed.isEmpty || partial.isEmpty ? "" : " "
                 let head: Text = Text(committed).foregroundStyle(Palette.secondary)
                 let newest: Text = Text(Self.tail(partial, Self.maxCharacters)).foregroundStyle(Palette.partial)
@@ -811,7 +825,7 @@ private struct LiveText: View {
         .truncationMode(.head)
         .frame(maxWidth: .infinity, alignment: .bottomLeading)
         .frame(height: 62, alignment: .bottomLeading)
-        .animation(.easeOut(duration: 0.12), value: meter.livePartial)
+        .animation(.easeOut(duration: 0.12), value: caption.partial)
     }
 
     /// Bagian akhir teks (maksimal `limit` karakter), dipotong di batas kata dan diawali "…".
@@ -826,30 +840,96 @@ private struct LiveText: View {
 /// Equalizer 5 batang warna-warni yang mengikuti level suara. Hanya bergerak saat level berubah (bukan animasi
 /// per frame), dengan pegas sehingga gerakannya tetap mulus. Saat hening, batang turun dan meredup.
 private struct EqualizerBars: View {
-    @ObservedObject var meter: LiveMeter
+    @ObservedObject var audio: AudioLevels
     let height: CGFloat
-    @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
-    private static let weights: [Double] = [0.55, 0.9, 1.0, 0.8, 0.6]
-    private static let colors: [Color] = [Palette.pink, Palette.red, Palette.orange, Palette.yellow, Palette.orange]
+    private static let bars: [LevelBars.Bar] = [
+        .init(id: 0, weight: 0.55, color: Palette.pink),
+        .init(id: 1, weight: 0.9, color: Palette.red),
+        .init(id: 2, weight: 1.0, color: Palette.orange),
+        .init(id: 3, weight: 0.8, color: Palette.yellow),
+        .init(id: 4, weight: 0.6, color: Palette.orange),
+    ]
 
     var body: some View {
-        let level = Double(min(max(meter.level, 0), 1))
+        LevelBars(level: Double(audio.level), bars: Self.bars, height: height, width: 3)
+    }
+}
+
+/// Batang-batang level suara. Hanya bergerak saat level berubah (bukan animasi per frame), dengan pegas
+/// sehingga gerakannya tetap mulus. Saat hening, batang turun dan meredup. Hanya menerima nilai (bukan objek),
+/// jadi ikut digambar ulang hanya bila levelnya berubah.
+private struct LevelBars: View {
+    struct Bar: Identifiable {
+        let id: Int
+        let weight: Double
+        let color: Color
+    }
+
+    let level: Double
+    let bars: [Bar]
+    let height: CGFloat
+    let width: CGFloat
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
+
+    var body: some View {
+        let clamped = min(max(level, 0), 1)
         // Variasi per batang diturunkan dari level itu sendiri, jadi setiap update terlihat "hidup" tanpa timer.
-        let seed = level * 41
-        HStack(alignment: .center, spacing: 2.5) {
-            ForEach(Self.weights.indices, id: \.self) { i in
-                let wobble = 0.65 + 0.35 * abs(sin(seed + Double(i) * 1.7))
-                let fraction = level < 0.04 ? 0.18 : min(1, 0.25 + level * 1.4 * Self.weights[i] * wobble)
+        let seed = clamped * 41
+        HStack(alignment: .center, spacing: width * 0.8) {
+            ForEach(bars) { bar in
+                let wobble = 0.65 + 0.35 * abs(sin(seed + Double(bar.id) * 1.7))
+                let fraction = clamped < 0.04 ? 0.18 : min(1, 0.25 + clamped * 1.4 * bar.weight * wobble)
                 Capsule()
-                    .fill(Self.colors[i])
-                    .frame(width: 3, height: max(3, height * fraction))
+                    .fill(bar.color)
+                    .frame(width: width, height: max(width, height * fraction))
             }
         }
         .frame(height: height)
-        .opacity(level < 0.04 ? 0.5 : 1)
-        .animation(reduceMotion ? nil : .spring(duration: 0.25, bounce: 0.35), value: meter.level)
+        .opacity(clamped < 0.04 ? 0.5 : 1)
+        .animation(reduceMotion ? nil : .spring(duration: 0.25, bounce: 0.35), value: clamped)
         .accessibilityHidden(true)
+    }
+}
+
+/// Chip satu jalur suara (mic atau audio meeting): ikon + batang level. Menyala dengan warnanya saat ada
+/// suara, redup saat hening.
+private struct SourceChip: View {
+    enum Source {
+        case mic, meeting
+
+        var icon: String { self == .mic ? "mic.fill" : "person.2.fill" }
+        var color: Color { self == .mic ? Palette.micSource : Palette.meetingSource }
+        var help: String {
+            self == .mic ? "Suaramu (mikrofon)" : "Suara peserta online (Zoom/Meet/Teams)"
+        }
+    }
+
+    @ObservedObject var audio: AudioLevels
+    let source: Source
+
+    var body: some View {
+        let level = Double(source == .mic ? audio.mic : audio.system)
+        let active = level >= 0.04
+        let color = source.color
+        HStack(spacing: 4) {
+            Image(systemName: source.icon)
+                .font(.system(size: 9, weight: .semibold))
+            LevelBars(level: level, bars: [
+                .init(id: 0, weight: 0.7, color: color),
+                .init(id: 1, weight: 1.0, color: color),
+                .init(id: 2, weight: 0.8, color: color),
+            ], height: 10, width: 2)
+        }
+        .foregroundStyle(active ? color : Palette.muted)
+        .padding(.horizontal, 8)
+        .frame(height: 22)
+        .background(Capsule().fill(color.opacity(active ? 0.2 : 0.07)))
+        .animation(.easeOut(duration: 0.2), value: active)
+        .help(source.help)
+        .accessibilityElement(children: .ignore)
+        .accessibilityLabel(source.help)
+        .accessibilityValue(active ? "ada suara" : "hening")
     }
 }
 

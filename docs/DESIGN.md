@@ -2,6 +2,8 @@
 
 Gaya: **AI-native dark** ala Dynamic Island, modern dan ceria. Permukaan hitam pekat menyatu dengan notch; setiap status punya
 satu warna aksen agar terbaca sekilas; satu elemen utama besar per status (timer, transkrip live, judul rapat).
+Satu identitas warna hangat (pink-oranye-kuning); gradien biru-ungu sengaja tidak dipakai karena terkesan
+generik ("AI slop", lihat skill `swiftui-design-skill`).
 
 ## Warna
 
@@ -10,8 +12,9 @@ satu warna aksen agar terbaca sekilas; satu elemen utama besar per status (timer
 | `red` | `#FF453A` | Merekam, tombol stop |
 | `orange` | `#FF9F0A` | Momen penting, peringatan, gagal |
 | `green` / `mint` | `#30D158` / `#66D4CF` | MoM siap |
-| `blue` / `purple` | `#0A84FF` / `#BF5AF2` | Memproses (AI) |
-| `pink` / `yellow` | `#FF375F` / `#FFD60A` | Logo & tombol Mulai (gradien `brand`: pink → orange → yellow), kata live yang masih dikenali (yellow → orange) |
+| `blue` | `#0A84FF` | Centang Word, jumlah tugas (dipakai hemat) |
+| `pink` / `yellow` | `#FF375F` / `#FFD60A` | Logo & tombol Mulai (gradien `brand`: pink → orange → yellow), memproses (gradien `process`: yellow → orange → pink), kata live yang masih dikenali (yellow → orange) |
+| `micSource` / `meetingSource` | yellow / mint | Chip jalur suara saat merekam: suaramu (mic) dan peserta online |
 | `muted` | putih 55% | Teks sekunder (kontras ±6:1 di atas hitam) |
 | `chip` | putih 12% | Latar tombol kapsul/ikon |
 
@@ -43,6 +46,21 @@ tombol ikon lingkaran 28 pt. Garis tepi putih 8% pada pulau terbuka, 22–30% pa
 | Titik "sedang menulis" | easeInOut 0,4 s bergantian | Hanya saat menyusun MoM |
 
 Semua animasi dekoratif mati bila **Reduce motion** aktif di macOS.
+
+## Aliran data (performa)
+
+Data yang berubah cepat dipecah per objek agar tiap perubahan hanya menggambar ulang komponennya sendiri
+(panduan `swiftui-expert-skill`: setiap `View` adalah batas invalidasi):
+
+| Objek | Berubah | Diamati oleh |
+|---|---|---|
+| `AudioLevels` (level campuran, mic, meeting) | ±10x/detik | Equalizer, chip jalur suara, cahaya rekam |
+| `RecordingClock` | 1x/detik | Timer |
+| `LiveCaption` (teks final + kata sementara) | ±7x/detik saat bicara | Transkrip live |
+| `AppState` | jarang | Bentuk & isi pulau |
+
+Sebelumnya level suara dan teks live berada di satu objek, sehingga teks tiga baris ikut ditata ulang setiap
+level suara berubah.
 
 Aturan performa: hindari `shadow`, `mask`, `blur`, dan `drawingGroup` pada apa pun yang ikut beranimasi;
 animasikan opacity/transform, bukan warna atau ukuran gradien; lapisan dekoratif diberi ukuran akhir pulau.
