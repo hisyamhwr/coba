@@ -30,6 +30,7 @@ from meeting_notes.transcriber import (
     collapse_repeats,
     normalize_loudness,
     format_timestamp,
+    merge_tracks,
     to_paragraphs,
 )
 
@@ -295,7 +296,7 @@ def test_base_glossary_fills_after_learned_terms(tmp_path):
     assert Glossary(tmp_path / "kamus.txt", base_path=None).terms == ["Daily Banking", "voip"]
     # Kamus dasar bawaan benar-benar ada dan berisi istilah dari temuan QA.
     bundled = Glossary(tmp_path / "kosong.txt").all_terms
-    assert {"setor tunai", "frontend", "VoIP", "nasabah"} <= set(bundled)
+    assert {"setor tunai", "frontend", "VoIP", "nasabah", "flagging", "FE", "BE", "DS"} <= set(bundled)
     assert len(Glossary(tmp_path / "kosong.txt").whisper_hint()) <= 400
 
 
@@ -314,7 +315,9 @@ def test_transcriber_prompt_includes_vocabulary():
     t = Transcriber(engine="faster-whisper")
     assert "Istilah" not in t.prompt()
     t.vocabulary = "VoIP, frontend"
-    assert t.prompt().endswith("Istilah: VoIP, frontend.")
+    # Daftar istilah di depan, contoh kalimat di akhir (Whisper memotong prompt panjang dari depan).
+    assert t.prompt().startswith("Istilah: VoIP, frontend. ")
+    assert t.prompt().endswith("production.")
 
 
 def test_pipeline_applies_corrections_and_updates_glossary(tmp_path, monkeypatch):
@@ -339,7 +342,7 @@ def test_pipeline_applies_corrections_and_updates_glossary(tmp_path, monkeypatch
     assert "Budi follow up ke vendor VoIP Jumat." in md
     assert "| follow up ke vendor | follow up ke vendor VoIP | 1 |" in md
     assert seen["glossary"][0] == "Daily Banking" and "setor tunai" in seen["glossary"]
-    assert transcriber.vocabulary.startswith("Daily Banking, setor tunai")
+    assert transcriber.vocabulary.startswith("Daily Banking, frontend")
     assert Glossary(settings.glossary_path).terms == ["VoIP", "Daily Banking"]
 
 
@@ -398,3 +401,67 @@ def test_cli_json_mode_for_mac_app(tmp_path, monkeypatch, capsys):
     assert json.loads(payload)["title"] == "Sinkronisasi Vendor"
     assert json.loads(payload)["action_items"] == 3
     assert seen == {"marks": [12.5, 300], "started_at": datetime(2026, 10, 27, 9, 30), "docx": True}
+
+
+def test_merge_tracks_drops_speaker_echo_from_mic():
+    system = [Segment(10, 14, "FE sama BE sudah siap untuk SIT minggu ini", "Peserta online")]
+    mic = [
+        Segment(2, 5, "Oke saya mulai ya", "Saya (mic)"),
+        # Suara speaker yang tertangkap mic (sedikit beda tangkapan): bukan ucapan pengguna.
+        Segment(10.3, 14.2, "FE sama BE sudah siap untuk SIT minggu", "Saya (mic)"),
+        Segment(15, 17, "Siap, nanti saya follow up", "Saya (mic)"),
+    ]
+    merged = merge_tracks(system, mic)
+    assert [(s.speaker, s.start) for s in merged] == [
+        ("Saya (mic)", 2), ("Peserta online", 10), ("Saya (mic)", 15)]
+
+
+class TrackTranscriber:
+    """Mengembalikan transkrip berbeda tergantung jalur mana yang ditranskripsi (dibedakan dari volumenya)."""
+
+    vocabulary = ""
+
+    def __init__(self):
+        self.calls = []
+
+    def transcribe(self, audio, on_progress=None):
+        level = float(np.abs(audio).max())
+        self.calls.append(level)
+        if on_progress:
+            on_progress(1.0)
+        if level > 0.25:
+            return [Segment(1, 3, "Deploy ke staging hari ini ya")]
+        return [Segment(4, 6, "Siap, saya cek flagging-nya")]
+
+
+def test_pipeline_transcribes_mic_and_meeting_tracks_separately(tmp_path, monkeypatch):
+    _no_api_key(monkeypatch)
+    monkeypatch.setattr(summarizer_module, "find_claude_cli", lambda: None)
+    tone = np.sin(np.arange(16000 * 2) / 5).astype("float32")
+    sf.write(tmp_path / "meeting.wav", tone * 0.4, 16000)
+    sf.write(tmp_path / "sistem.wav", tone * 0.3, 16000)
+    sf.write(tmp_path / "mic.wav", tone * 0.1, 16000)
+    settings = Settings(output_dir=tmp_path / "out")
+    statuses = []
+    transcriber = TrackTranscriber()
+    result = process_recording(tmp_path / "meeting.wav", settings, INFO.started_at, statuses.append, transcriber)
+    md = result.markdown_path.read_text(encoding="utf-8")
+    assert "Peserta online:** Deploy ke staging hari ini ya" in md
+    assert "Saya (mic):** Siap, saya cek flagging-nya" in md
+    assert len(transcriber.calls) == 2
+    assert any(s.startswith("Mentranskrip suaramu (mic)") for s in statuses)
+
+
+def test_pipeline_uses_mix_when_meeting_track_is_silent(tmp_path, monkeypatch):
+    """Rapat offline: jalur meeting hening, jadi cukup satu transkripsi tanpa label."""
+    _no_api_key(monkeypatch)
+    monkeypatch.setattr(summarizer_module, "find_claude_cli", lambda: None)
+    tone = np.sin(np.arange(16000 * 2) / 5).astype("float32")
+    sf.write(tmp_path / "meeting.wav", tone * 0.1, 16000)
+    sf.write(tmp_path / "sistem.wav", np.zeros(32000, dtype="float32"), 16000)
+    sf.write(tmp_path / "mic.wav", tone * 0.1, 16000)
+    transcriber = TrackTranscriber()
+    result = process_recording(tmp_path / "meeting.wav", Settings(output_dir=tmp_path / "out"),
+                               INFO.started_at, lambda _: None, transcriber)
+    assert len(transcriber.calls) == 1
+    assert "Saya (mic):" not in result.markdown_path.read_text(encoding="utf-8")

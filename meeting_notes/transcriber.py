@@ -9,6 +9,7 @@ import re
 import sys
 from collections.abc import Callable
 from dataclasses import dataclass
+from difflib import SequenceMatcher
 from pathlib import Path
 
 import numpy as np
@@ -18,11 +19,19 @@ CHUNK_SECONDS = 600
 # Potongan dicari di titik paling sunyi dalam 20 detik terakhir agar kalimat tidak terpotong.
 CUT_SEARCH_SECONDS = 20
 SILENCE_RMS = 1e-3
+# Tingkat suara (lihat speech_level) minimum agar sebuah jalur rekaman dianggap berisi ucapan.
+SPEECH_LEVEL = 3e-3
+# Label jalur rekaman terpisah dari aplikasi Mac.
+MIC_LABEL = "Saya (mic)"
+SYSTEM_LABEL = "Peserta online"
 
-# Membantu Whisper mengenali percakapan campuran Indonesia-Inggris.
+# Contoh gaya bicara rapat tim produk/developer. Whisper meniru ejaan dan gaya prompt, jadi kalimat alami
+# dengan istilah teknis dan singkatan (FE, BE, PR) jauh lebih efektif daripada daftar kata saja. Diletakkan
+# paling akhir karena Whisper memotong prompt yang terlalu panjang dari depan.
 BASE_PROMPT = (
-    "Ini adalah rekaman rapat kerja dalam Bahasa Indonesia yang bercampur dengan istilah English, "
-    "misalnya deadline, meeting, follow up, project, dan budget."
+    "Rapat kerja tim produk digital dalam Bahasa Indonesia campur English. "
+    "Oke, FE sama BE sudah siap, fiturnya pakai feature flag dulu, flagging-nya kita nyalakan bertahap. "
+    "PR-nya tolong di-review dan di-merge, lalu deploy ke staging buat SIT dan UAT sebelum production."
 )
 
 # Kalimat "halusinasi" khas Whisper saat bagian rekaman sunyi.
@@ -120,24 +129,49 @@ def clean_segments(segments: list[Segment]) -> list[Segment]:
     return result
 
 
-def normalize_loudness(audio: np.ndarray, target_rms: float = 0.1, max_gain: float = 10.0) -> np.ndarray:
-    """Samakan volume ucapan ke tingkat yang nyaman untuk Whisper.
-
-    Suara pelan (mic jauh, pembicara bersuara kecil) dikuatkan hingga max_gain kali. Acuan volumenya adalah
-    bagian paling keras (persentil 95 per 100 ms) supaya jeda sunyi tidak ikut menaikkan penguatan.
-    """
+def speech_level(audio: np.ndarray) -> float:
+    """Volume bagian paling keras (persentil 95 RMS per 100 ms), sehingga jeda sunyi tidak ikut terhitung."""
     frame = SAMPLE_RATE // 10
     usable = len(audio) // frame * frame
     if usable == 0:
-        return audio
+        return 0.0
     rms = np.sqrt((audio[:usable].reshape(-1, frame) ** 2).mean(axis=1))
-    speech_level = float(np.percentile(rms, 95))
-    if speech_level < 1e-4:
+    return float(np.percentile(rms, 95))
+
+
+def normalize_loudness(audio: np.ndarray, target_rms: float = 0.1, max_gain: float = 10.0) -> np.ndarray:
+    """Samakan volume ucapan ke tingkat yang nyaman untuk Whisper.
+
+    Suara pelan (mic jauh, pembicara bersuara kecil) dikuatkan hingga max_gain kali.
+    """
+    level = speech_level(audio)
+    if level < 1e-4:
         return audio
-    gain = min(target_rms / speech_level, max_gain)
+    gain = min(target_rms / level, max_gain)
     if 0.8 < gain < 1.25:
         return audio
     return np.clip(audio * gain, -1.0, 1.0).astype(np.float32)
+
+
+def _echoes(seg: Segment, others: list[Segment], threshold: float = 0.6) -> bool:
+    """Apakah seg sebagian besar mengulang kata-kata dari others pada waktu yang hampir sama."""
+    words = _normalize(seg.text).split()
+    near = [o.text for o in others if o.start <= seg.end + 2 and o.end >= seg.start - 2]
+    reference = _normalize(" ".join(near)).split()
+    if not words or not reference:
+        return False
+    matcher = SequenceMatcher(None, words, reference, autojunk=False)
+    return sum(block.size for block in matcher.get_matching_blocks()) / len(words) >= threshold
+
+
+def merge_tracks(system: list[Segment], mic: list[Segment]) -> list[Segment]:
+    """Gabungkan transkrip jalur meeting dan jalur mic sesuai waktu.
+
+    Saat memakai speaker, mic ikut menangkap suara peserta online; potongan mic yang mengulang ucapan di jalur
+    meeting pada waktu yang sama dibuang agar tidak tercatat dua kali.
+    """
+    kept = [s for s in mic if not _echoes(s, system)]
+    return sorted(system + kept, key=lambda s: s.start)
 
 
 def chunk_bounds(audio: np.ndarray, sr: int = SAMPLE_RATE, chunk_seconds: int = CHUNK_SECONDS,
@@ -232,7 +266,7 @@ class Transcriber:
         self.engine.download()
 
     def prompt(self) -> str:
-        return f"{BASE_PROMPT} Istilah: {self.vocabulary}." if self.vocabulary else BASE_PROMPT
+        return f"Istilah: {self.vocabulary}. {BASE_PROMPT}" if self.vocabulary else BASE_PROMPT
 
     def transcribe(self, audio: np.ndarray, on_progress: Callable[[float], None] | None = None) -> list[Segment]:
         bounds = chunk_bounds(audio, chunk_seconds=self.chunk_seconds)

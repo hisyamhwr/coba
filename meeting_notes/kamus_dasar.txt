@@ -1,13 +1,151 @@
-# Kamus dasar: istilah umum rapat perbankan, produk digital, dan IT (campuran Indonesia-Inggris).
+# Kamus dasar: istilah umum rapat tim produk digital, developer, dan perbankan (campuran Indonesia-Inggris).
 # Dipakai bersama kamus yang dipelajari dari rapatmu (~/MeetingNotes/kamus.txt).
 # Urutan penting: istilah teratas paling sering salah dengar dan diprioritaskan untuk Whisper.
+frontend
+backend
+FE
+BE
+DS
+flagging
+feature flag
+toggle
+QA
+PR
+pull request
+merge
+deploy
+staging
+production
+SIT
+UAT
+pentest
+hotfix
+bug
+rollback
+release
+API
+endpoint
+payload
+response
+request
+sprint
+backlog
+story point
+refinement
+grooming
+retro
+standup
+planning
+blocker
+dependency
+carry over
+Jira
+Figma
+FigJam
+Confluence
+GitLab
+GitHub
+repo
+branch
+commit
+code review
+review
+approve
+pipeline
+CI/CD
+build
+crash
+force close
+timeout
+latency
+error
+log
+monitoring
+Crashlytics
+Firebase
+push notification
+deeplink
+webview
+native
+SwiftUI
+Jetpack Compose
+React Native
+Flutter
+Kotlin
+Swift
+iOS
+Android
+middleware
+microservice
+API gateway
+service
+database
+query
+cache
+server
+infra
+DevOps
+SRE
+environment
+config
+migration
+tech debt
+refactor
+unit test
+test case
+test scenario
+regression
+smoke test
+edge case
+happy path
+negative case
+mockup
+wireframe
+prototype
+handoff
+design system
+component
+user flow
+UI
+UX
+UI/UX
+UX writer
+PM
+PO
+BA
+SA
+squad
+tribe
+chapter
+PRD
+BRD
+FSD
+Nodin
+DRB
+user story
+acceptance criteria
+scope
+timeline
+deadline
+milestone
+roadmap
+go-live
+rollout
+stakeholder
+vendor
+approval
+follow up
+action item
+MoM
+KPI
+OKR
+dashboard
+BRImo
 setor tunai
 tarik tunai
 nasabah
 rekening
 teller
-frontend
-backend
 VoIP
 merchant
 POS
@@ -15,6 +153,12 @@ Daily Banking
 mobile banking
 internet banking
 core banking
+CIF
+BritAma
+Tabungan Rencana
+deposito valas
+Konversi Valas
+debit virtual
 transfer antarbank
 virtual account
 QRIS
@@ -46,50 +190,11 @@ kantor cabang
 SOP
 compliance
 audit
-API
-endpoint
 SDK
-deploy
-staging
-production
-UAT
-SIT
-go-live
-rollout
-release
-hotfix
-bug
 issue
 ticket
-sprint
-backlog
-user story
-PRD
-BRD
-UI/UX
-dashboard
-database
-server
-infra
-DevOps
-QA
-testing
-timeline
-deadline
-milestone
-roadmap
-stakeholder
-vendor
 budget
-approval
-follow up
-action item
-KPI
-OKR
-MoM
 weekly sync
-standup
-review
 feedback
 onboarding
 user
@@ -97,7 +202,6 @@ customer
 traffic
 downtime
 maintenance
-monitoring
 notifikasi
 OTP
 PIN
@@ -112,7 +216,5 @@ biaya admin
 cashback
 promo
 campaign
-Android
-iOS
 web
 app

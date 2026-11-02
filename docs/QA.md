@@ -17,6 +17,7 @@ pesan galat/screenshot di langkah pertama yang gagal. Bug diperbaiki sebagai 2.0
 | 7b | (Temuan 2.0.7) MoM jadi, tetapi rekaman hening: suara sendiri dan peserta meeting tidak terekam | 2.0.8: izin macOS tersangkut setelah build ulang → tanda tangan berbasis bundle ID, reset izin, peringatan hening, `rekaman.log` |
 | 7c | (Temuan 2.0.8) Meeting Teams: pulau tetap "Meeting Notes" (tidak merekam), tidak ada transkrip live | 2.0.9: rekaman mic tidak lagi menunggu izin audio sistem; status "Menyiapkan..."; langkah tercatat di `rekaman.log` |
 | 7d | (Temuan 2.0.9) Transkrip live tidak muncul; audio meeting tidak terekam saat memakai headset | 2.0.10: error transkrip live ditampilkan + coba ulang; audio meeting dipasang ulang otomatis; garis waktu level per 10 detik di `rekaman.log` |
+| 7e | (Temuan 2.0.10) Istilah developer salah tangkap: "legging" (flagging), FE, DS | 2.1.0: kamus & prompt developer, koreksi singkatan dieja; rekaman dua jalur. Cek: folder rekaman berisi `mic.wav` + `sistem.wav`, transkrip berlabel "Saya (mic)" / "Peserta online" |
 | 7 | Tunggu | Kartu "MoM siap" + notifikasi; **Buka MoM** membuka MoM (.md, atau .docx bila "Buat juga Word" dicentang) berisi "Momen Penting" |
 | 8 | Izinkan Screen & System Audio Recording, buka ulang app, putar video YouTube sambil merekam **dengan headphone** | Suara video ikut tertranskrip di MoM |
 | 9 | Meeting Zoom/Meet sungguhan ≥ 15 menit | Suara peserta lain dan suaramu tercatat; MoM per agenda |

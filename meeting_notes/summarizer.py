@@ -26,10 +26,30 @@ Langkah 1 - koreksi salah dengar. Mesin transkripsi sering menuliskan kata Indon
 diucapkan cepat sebagai kata Inggris yang bunyinya mirip, atau salah menangkap istilah. Contoh:
 - "store turner" -> "setor tunai", "rekani" -> "rekening", "nasib apa" -> "nasabah"
 - "girlfriend" -> "frontend", "PoIP" -> "VoIP", "mercahan" -> "merchant"
+- "legging" / "lagging" (saat membahas fitur yang dinyalakan bertahap) -> "flagging", \
+"fitur flag" -> "feature flag", "bek en" / "beken" -> "backend", \
+"fron en" / "pron end" -> "frontend", "diploi" -> "deploy", "mers" -> "merge", "ripiu" -> "review", \
+"staging" yang tertulis "steging" -> "staging", "story poin" -> "story point"
+
+Istilah developer dan produk digital sangat sering salah tangkap. Kenali istilah seperti FE \
+(frontend), BE (backend), DS (mis. design system), QA, PR (pull request), merge, deploy, staging, \
+production, rollback, hotfix, feature flag/flagging, SIT, UAT, pentest, sprint, backlog, story point, \
+refinement, grooming, blocker, endpoint, payload, API, Jira, Figma, SwiftUI, Jetpack Compose, React \
+Native, iOS, Android.
+Singkatan sering diucapkan dengan ejaan huruf Indonesia dan tertulis sebagai kata aneh. Gabungkan \
+kembali menjadi singkatannya bila sesuai topik:
+- "ef e" / "efe" / "efi" -> "FE", "be e" / "bie" -> "BE", "de es" / "dies" -> "DS"
+- "pe er" / "pier" -> "PR", "kiu e" / "kyu ei" -> "QA", "yu ai" -> "UI", "yu eks" -> "UX"
+- "pe em" -> "PM", "pe o" -> "PO", "be a" -> "BA", "es ai te" / "esite" -> "SIT", \
+"yu e te" / "yuete" -> "UAT", "a pe i" / "ei pi ai" -> "API", "si ai si di" -> "CI/CD"
+Tulis singkatan dengan huruf besar seperti di kamus (mis. "fe" -> "FE"), tanpa mengembangkannya \
+menjadi kepanjangan di transkrip. Sebaliknya, kata yang diucapkan utuh tetap ditulis utuh: \
+"bek en" -> "backend" (bukan "BE"); hanya ejaan huruf seperti "be e" yang menjadi "BE".
+
 Cara menentukan koreksi:
 - Utamakan kemiripan BUNYI, lalu cocokkan dengan topik rapat (mis. perbankan: setor tunai, \
-tarik tunai, nasabah, rekening, teller). Jangan menebak kata yang bunyinya jauh berbeda hanya \
-karena maknanya cocok.
+tarik tunai, nasabah, rekening, teller; developer: frontend, backend, flagging, deploy). Jangan \
+menebak kata yang bunyinya jauh berbeda hanya karena maknanya cocok.
 - `wrong` disalin persis seperti tertulis di transkrip. Jika kata itu bisa benar di tempat lain, \
 sertakan kata di sekitarnya agar penggantiannya tepat sasaran.
 - `correct` menggantikan tepat bagian yang sama: jangan menambah kata baru atau tanda baca yang \
@@ -53,6 +73,10 @@ topik; gabungkan obrolan kecil ke topik terdekat dan abaikan basa-basi.
 kalimat umum seperti "tim berdiskusi tentang progres".
 - Keputusan hanya yang benar-benar disepakati, bukan sekadar usulan. Penugasan seseorang \
 ("Rina tolong buat ...") adalah action item, bukan keputusan; jangan ditulis di keduanya.
+- Label "Saya (mic)" adalah suara dari mikrofon pengguna (pengguna sendiri, dan orang lain di ruangan \
+yang sama bila rapat hibrida); "Peserta online" adalah suara peserta dari aplikasi meeting \
+(Zoom/Teams/Meet). Pakai label ini untuk membedakan siapa yang meminta dan siapa yang ditugaskan; \
+tulis "Saya" sebagai penanggung jawab bila pengguna sendiri yang menyanggupi tugas.
 - Transkrip bisa berlabel "Pembicara 1", "Pembicara 2", dst. Jika nama asli pembicara jelas dari \
 percakapan (mis. dipanggil namanya lalu menjawab), pakai nama itu di MoM; jika tidak, pakai labelnya.
 - Peserta hanya orang yang hadir atau berbicara. Orang yang sekadar disebut namanya \

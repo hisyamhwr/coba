@@ -2,6 +2,33 @@
 
 Format versi: `MAYOR.FITUR.PERBAIKAN` (lihat [docs/ROADMAP.md](docs/ROADMAP.md)).
 
+## 2.1.0
+
+Istilah developer dan kualitas tangkapan suara.
+
+- **Istilah developer dan produk digital.**
+  - Kamus dasar kini ±220 istilah. Istilah developer ditaruh paling atas: frontend/backend, FE, BE, DS,
+    flagging/feature flag, PR, merge, deploy, staging, SIT, UAT, pentest, sprint, story point, Jira, Figma,
+    SwiftUI, Jetpack Compose, React Native, BRImo, Tabungan Rencana, dll.
+  - Whisper diberi contoh kalimat rapat developer. Whisper meniru ejaan dari contoh, jadi singkatan seperti
+    FE/BE/PR lebih sering tertulis benar. Contoh ini diletakkan di akhir prompt agar tidak terpotong.
+  - Claude mengenali salah dengar khas developer: "legging" → "flagging", "bek en" → "backend",
+    "diploi" → "deploy", "ripiu" → "review".
+  - Claude juga menggabungkan singkatan yang dieja dengan huruf Indonesia: "ef e" → FE, "de es" → DS,
+    "pe er" → PR, "kiu e" → QA, "esite" → SIT.
+  - Diuji dengan Claude sungguhan: 11/11 salah dengar terkoreksi, dan tidak ada koreksi keliru pada rapat
+    non-teknis (mis. "legging" sebagai pakaian).
+- **Rekaman dua jalur.**
+  - Aplikasi Mac menyimpan `mic.wav` (suaramu) dan `sistem.wav` (suara Zoom/Teams/Meet) di samping `meeting.wav`.
+  - Whisper lokal mentranskripsi tiap jalur terpisah:
+    - suara meeting yang jernih tidak lagi tercampur derau ruangan dari mic;
+    - suaramu yang lebih pelan dikuatkan tersendiri;
+    - transkrip berlabel **"Saya (mic)"** dan **"Peserta online"**, sehingga MoM tahu siapa yang meminta dan
+      siapa yang menyanggupi.
+  - Suara speaker yang ikut tertangkap mic dibuang agar tidak tercatat dua kali.
+  - Rapat offline (jalur meeting hening) tetap memakai satu jalur seperti sebelumnya.
+  - Konsekuensi: waktu transkripsi rapat online bisa sampai dua kali lebih lama.
+
 ## 2.0.10
 
 - Transkrip live: error pengenal suara macOS tidak lagi didiamkan (sebelumnya pulau hanya menulis

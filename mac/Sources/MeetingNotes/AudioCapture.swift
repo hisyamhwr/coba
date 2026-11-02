@@ -39,6 +39,10 @@ final class AudioCapture: NSObject, SCStreamOutput, SCStreamDelegate {
     private var systemFormat: AVAudioFormat?
     private var scStream: SCStream?
     private var file: AVAudioFile?
+    /// Jalur terpisah: suara mic dan suara meeting. Ditranskripsi masing-masing agar suara meeting yang digital
+    /// tidak tercampur derau ruangan, dan transkrip bisa berlabel "Saya (mic)" / "Peserta online".
+    private var micFile: AVAudioFile?
+    private var systemFile: AVAudioFile?
     private var systemBuffer: [Float] = []
     private var lastLevel: Float = 0
     private var running = false
@@ -96,19 +100,10 @@ final class AudioCapture: NSObject, SCStreamOutput, SCStreamDelegate {
     /// Mulai merekam mikrofon. Audio sistem dimulai terpisah lewat `startSystem()` agar menunggu izin
     /// Screen & System Audio Recording tidak menahan rekaman.
     func start() throws {
-        file = try AVAudioFile(
-            forWriting: output,
-            settings: [
-                AVFormatIDKey: kAudioFormatLinearPCM,
-                AVSampleRateKey: 16000,
-                AVNumberOfChannelsKey: 1,
-                AVLinearPCMBitDepthKey: 16,
-                AVLinearPCMIsFloatKey: false,
-                AVLinearPCMIsBigEndianKey: false,
-            ],
-            commonFormat: .pcmFormatFloat32,
-            interleaved: false
-        )
+        let folder = output.deletingLastPathComponent()
+        file = try Self.makeWriter(output)
+        micFile = try Self.makeWriter(folder.appendingPathComponent("mic.wav"))
+        systemFile = try Self.makeWriter(folder.appendingPathComponent("sistem.wav"))
         running = true
         try startMic()
         // Mic berganti (AirPods tersambung, Zoom mengubah format mic): AVAudioEngine berhenti sendiri dan rekaman
@@ -146,7 +141,11 @@ final class AudioCapture: NSObject, SCStreamOutput, SCStreamDelegate {
             Task { try? await active.stopCapture() }
         }
         scStream = nil
-        writeQueue.sync { file = nil }
+        writeQueue.sync {
+            file = nil
+            micFile = nil
+            systemFile = nil
+        }
         note("Selesai\n" + diagnostics())
         logQueue.sync {}
     }
@@ -255,10 +254,19 @@ final class AudioCapture: NSObject, SCStreamOutput, SCStreamDelegate {
         for i in 0..<system.count {
             mixed[i] = max(-1, min(1, mixed[i] + system[i]))
         }
-        guard let out = Self.makeBuffer(mixed) else { return }
+        // Jalur meeting diisi hening bila audio sistem belum masuk, agar ketiga file selalu sama panjang.
+        var systemTrack = system
+        if systemTrack.count < mic.count { systemTrack += [Float](repeating: 0, count: mic.count - systemTrack.count) }
+        guard let out = Self.makeBuffer(mixed),
+              let micOut = Self.makeBuffer(mic),
+              let systemOut = Self.makeBuffer(systemTrack)
+        else { return }
 
         writeQueue.async { [weak self] in
-            try? self?.file?.write(from: out)
+            guard let self else { return }
+            try? self.file?.write(from: out)
+            try? self.micFile?.write(from: micOut)
+            try? self.systemFile?.write(from: systemOut)
         }
         onSamples?(out)
         var rms: Float = 0
@@ -378,6 +386,23 @@ final class AudioCapture: NSObject, SCStreamOutput, SCStreamDelegate {
         }
         guard error == nil, let data = out.floatChannelData else { return [] }
         return Array(UnsafeBufferPointer(start: data[0], count: Int(out.frameLength)))
+    }
+
+    /// WAV 16 kHz mono 16-bit.
+    private static func makeWriter(_ url: URL) throws -> AVAudioFile {
+        try AVAudioFile(
+            forWriting: url,
+            settings: [
+                AVFormatIDKey: kAudioFormatLinearPCM,
+                AVSampleRateKey: 16000,
+                AVNumberOfChannelsKey: 1,
+                AVLinearPCMBitDepthKey: 16,
+                AVLinearPCMIsFloatKey: false,
+                AVLinearPCMIsBigEndianKey: false,
+            ],
+            commonFormat: .pcmFormatFloat32,
+            interleaved: false
+        )
     }
 
     private static func makeBuffer(_ samples: [Float]) -> AVAudioPCMBuffer? {

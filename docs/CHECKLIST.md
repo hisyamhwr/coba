@@ -101,7 +101,12 @@ Server tidak punya Swift/macOS, jadi semua butir di bawah ⚠️ sampai berhasil
 
 ## 4. Rencana setelah 2.0.0
 
-- ⬜ **2.1.0** Perpustakaan rapat: riwayat semua rapat, pencarian, dan "Tanya ke rapat"
-- ⬜ **2.2.0** Label pembicara (siapa bicara apa) untuk Whisper lokal; sudah ada di mesin cloud sejak 1.2.0
+- ☑️ **2.1.0** Istilah developer: kamus dasar ±220 istilah (FE, BE, DS, flagging, PR, SIT, UAT, BRImo, ...),
+  prompt Whisper bergaya rapat developer, aturan koreksi singkatan yang dieja ("ef e" → FE); teruji dengan Claude
+  sungguhan (11/11 benar, 0 koreksi keliru di rapat non-teknis)
+- ⚠️ **2.1.0** Rekaman dua jalur (`mic.wav`, `sistem.wav`) ditranskripsi terpisah, label "Saya (mic)" /
+  "Peserta online", gema speaker dibuang (Python teruji; Swift menunggu QA di Mac)
+- ⬜ **2.2.0** Perpustakaan rapat: riwayat semua rapat, pencarian, dan "Tanya ke rapat"
+- ⬜ **2.3.0** Label pembicara per orang untuk peserta online (Whisper lokal); sudah ada di mesin cloud sejak 1.2.0
 
 Dibatalkan atas permintaan: integrasi kalender, deteksi rapat otomatis, dan bagikan ke Slack/Notion/email.
