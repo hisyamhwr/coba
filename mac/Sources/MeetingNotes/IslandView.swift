@@ -688,9 +688,15 @@ private struct Confetti: View {
         let spin: Double
     }
 
-    private static let pieces: [Piece] = (0..<14).map { i in
-        Piece(id: i, angle: Double(i) / 14 * 360 + Double(i % 3) * 9, distance: Double(26 + (i * 7) % 22),
-              spin: Double((i * 53) % 270) - 135)
+    private static let pieces: [Piece] = (0..<14).map(makePiece)
+
+    /// Dipecah per langkah bertipe jelas: dalam satu ekspresi, pemeriksa tipe Swift kehabisan waktu.
+    private static func makePiece(_ i: Int) -> Piece {
+        let index = Double(i)
+        let angle: Double = index / 14 * 360 + Double(i % 3) * 9
+        let distance: Double = Double(26 + (i * 7) % 22)
+        let spin: Double = Double((i * 53) % 270) - 135
+        return Piece(id: i, angle: angle, distance: distance, spin: spin)
     }
 
     var body: some View {

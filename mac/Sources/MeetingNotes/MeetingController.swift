@@ -101,8 +101,8 @@ final class MeetingController {
             let worker = LiveWorker(folder: dir)
             worker.start()
             self.worker = worker
-            let timer = Timer(timeInterval: 0.5, repeats: true) { [weak self] _ in
-                Task { @MainActor in self?.tick() }
+            let timer = Timer(timeInterval: 0.5, repeats: true) { [weak controller = self] _ in
+                Task { @MainActor in controller?.tick() }
             }
             // Mode .common: timer tetap berjalan saat menu bar sedang dibuka.
             RunLoop.main.add(timer, forMode: .common)

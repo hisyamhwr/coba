@@ -2,6 +2,11 @@
 
 Format versi: `MAYOR.FITUR.PERBAIKAN` (lihat [docs/ROADMAP.md](docs/ROADMAP.md)).
 
+## 3.2.1
+
+- Perbaikan build: ekspresi posisi konfeti dipecah per langkah (pemeriksa tipe Swift kehabisan waktu).
+- Peringatan `weak self` pada timer rekaman dihilangkan.
+
 ## 3.2.0
 
 Bentuk pulau baru, terinspirasi notch app modern (mis. Droppy):
