@@ -2,6 +2,23 @@
 
 Format versi: `MAYOR.FITUR.PERBAIKAN` (lihat [docs/ROADMAP.md](docs/ROADMAP.md)).
 
+## 2.3.4
+
+- **Transkrip live lebih real time dan tidak terpotong.**
+  - Kata terakhir sebelum jeda kini selalu tampil. Sebelumnya bisa tertahan pembatas update.
+  - Update hingga ±7x per detik.
+  - Teks panjang dipotong di depan ("…"), bukan di kanan, sehingga ucapan terbaru selalu terlihat.
+  - Kata yang masih dikenali tampil kuning-oranye, lalu berubah putih begitu final.
+  - Istilah dari kamus (FE, deploy, flagging, ...) diberikan ke pengenal suara macOS agar lebih tepat.
+- **Huruf lebih ringan dan estetik:** SF Pro regular untuk transkrip dan teks, SF Pro Rounded medium/semibold
+  untuk judul dan angka (sebelumnya banyak yang tebal).
+- **Lebih modern, ceria, dan hidup** (tetap ringan):
+  - gradien identitas pink-oranye-kuning dan equalizer warna-warni;
+  - logo memantul dan miring saat disorot; tombol terangkat saat disorot;
+  - penghitung momen penting "meletup";
+  - titik "sedang menulis" saat menyusun MoM; garis progres dengan kepala bercahaya;
+  - centang tergambar disertai semburan konfeti saat MoM siap.
+
 ## 2.3.3
 
 Animasi lebih mulus dan ringan:

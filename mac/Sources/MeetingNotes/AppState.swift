@@ -68,4 +68,6 @@ final class LiveMeter: ObservableObject {
     @Published var level: Float = 0
     @Published var elapsed: TimeInterval = 0
     @Published var liveText = ""
+    /// Kata-kata yang masih dikenali (belum final), ditampilkan dengan warna aksen.
+    @Published var livePartial = ""
 }

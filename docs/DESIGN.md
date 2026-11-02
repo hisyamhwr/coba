@@ -1,6 +1,6 @@
 # Sistem desain pulau (aplikasi Mac)
 
-Gaya: **AI-native dark** ala Dynamic Island. Permukaan hitam pekat menyatu dengan notch; setiap status punya
+Gaya: **AI-native dark** ala Dynamic Island, modern dan ceria. Permukaan hitam pekat menyatu dengan notch; setiap status punya
 satu warna aksen agar terbaca sekilas; satu elemen utama besar per status (timer, transkrip live, judul rapat).
 
 ## Warna
@@ -11,14 +11,18 @@ satu warna aksen agar terbaca sekilas; satu elemen utama besar per status (timer
 | `orange` | `#FF9F0A` | Momen penting, peringatan, gagal |
 | `green` / `mint` | `#30D158` / `#66D4CF` | MoM siap |
 | `blue` / `purple` | `#0A84FF` / `#BF5AF2` | Memproses (AI) |
-| `pink` | `#FF375F` | Logo & tombol Mulai (gradien `brand`: pink → red → orange) |
+| `pink` / `yellow` | `#FF375F` / `#FFD60A` | Logo & tombol Mulai (gradien `brand`: pink → orange → yellow), kata live yang masih dikenali (yellow → orange) |
 | `muted` | putih 55% | Teks sekunder (kontras ±6:1 di atas hitam) |
 | `chip` | putih 12% | Latar tombol kapsul/ikon |
 
 ## Tipografi
 
-SF Pro Rounded (sistem): angka dan judul terasa ramah, angka timer memakai `monospacedDigit` agar tidak
-bergoyang. Skala: 11 (label), 12 (tombol), 15–16 (judul status), 17 (transkrip live), 18 (judul rapat).
+SF Pro (regular) untuk transkrip live dan teks: ringan dan paling mudah dibaca. SF Pro Rounded (medium/semibold)
+untuk judul dan angka: ramah dan ceria. Bobot dibatasi regular–semibold agar tidak terasa berat. Angka timer
+memakai `monospacedDigit` agar tidak bergoyang. Skala: 11 (label kecil), 12 (tombol), 15 (judul status,
+transkrip live), 17 (judul rapat).
+
+Transkrip live selalu menampilkan kata terbaru: teks lama dipotong di depan dengan "…", tidak pernah di kanan.
 
 ## Bentuk
 
@@ -34,7 +38,9 @@ tombol ikon lingkaran 28 pt. Garis tepi putih 8% pada pulau terbuka, 22–30% pa
 | Tekan tombol | spring 0,22 s, skala 0,92 + sedikit gelap | Disertai getaran halus trackpad untuk aksi utama |
 | Equalizer & cahaya rekam | spring 0,25 s, hanya saat level suara berubah | Tidak ada animasi per frame selama rapat |
 | Garis tepi gradien "bernapas" | easeInOut 1,1 s, berulang | Hanya saat memproses; hanya opacity yang beranimasi |
-| Centang MoM siap, riak "Penting" | sekali jalan | |
+| Centang MoM siap + konfeti, riak "Penting" | sekali jalan | |
+| Tombol disorot | spring 0,3 s, skala 1,05 + sedikit terang | |
+| Titik "sedang menulis" | easeInOut 0,4 s bergantian | Hanya saat menyusun MoM |
 
 Semua animasi dekoratif mati bila **Reduce motion** aktif di macOS.
 

@@ -39,10 +39,12 @@ final class MeetingController {
         }
 
         // Transkrip live opsional (menu bar) karena pengenal suara memakai CPU selama rapat.
-        let live: LiveTranscriber? = state.liveTranscript ? LiveTranscriber { [weak self] text in
+        let live: LiveTranscriber? = state.liveTranscript ? LiveTranscriber(terms: Self.glossaryTerms()) {
+            [weak self] caption in
             Task { @MainActor in
-                guard let self, self.meter.liveText != text else { return }
-                self.meter.liveText = text
+                guard let self else { return }
+                if self.meter.liveText != caption.committed { self.meter.liveText = caption.committed }
+                if self.meter.livePartial != caption.partial { self.meter.livePartial = caption.partial }
             }
         } : nil
         let capture = AudioCapture(output: dir.appendingPathComponent("meeting.wav"))
@@ -84,6 +86,7 @@ final class MeetingController {
             self.meter.elapsed = 0
             self.meter.level = 0
             self.meter.liveText = live == nil ? "Transkrip live dimatikan (hemat baterai)." : ""
+            self.meter.livePartial = ""
             self.state.result = nil
             self.state.phase = .recording
             self.state.expanded = true
@@ -109,6 +112,21 @@ final class MeetingController {
                 self.state.warning = nil
             }
         }
+    }
+
+    /// Istilah dari kamus yang dipelajari (~/MeetingNotes/kamus.txt) lalu kamus dasar, untuk transkrip live.
+    private static func glossaryTerms() -> [String] {
+        let files = [
+            Config.outputDir.appendingPathComponent("kamus.txt"),
+            URL(fileURLWithPath: Config.repoPath).appendingPathComponent("meeting_notes/kamus_dasar.txt"),
+        ]
+        var seen = Set<String>()
+        return files.flatMap { url -> [String] in
+            let text = (try? String(contentsOf: url, encoding: .utf8)) ?? ""
+            return text.split(separator: "\n").map { $0.trimmingCharacters(in: .whitespaces) }
+                .filter { !$0.isEmpty && !$0.hasPrefix("#") }
+        }
+        .filter { seen.insert($0.lowercased()).inserted }
     }
 
     func markImportant() {

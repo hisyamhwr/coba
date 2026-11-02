@@ -1,31 +1,51 @@
 import AppKit
 import SwiftUI
 
-/// Token desain pulau. Gaya: "AI-native dark" ala Dynamic Island. Permukaan hitam pekat agar menyatu dengan
-/// notch, satu warna aksen per status supaya status terbaca sekilas, dan teks putih/abu dengan kontras >= 4.5:1.
+/// Token desain pulau (lihat docs/DESIGN.md). Gaya: "AI-native dark", modern dan ceria. Permukaan hitam pekat
+/// agar menyatu dengan notch, satu warna aksen per status supaya status terbaca sekilas, dan gradien hangat
+/// pink-oranye-kuning sebagai identitas.
 private enum Palette {
     static let red = Color(red: 1.0, green: 0.27, blue: 0.23)      // #FF453A merekam
     static let orange = Color(red: 1.0, green: 0.62, blue: 0.04)   // #FF9F0A penting, peringatan
+    static let yellow = Color(red: 1.0, green: 0.84, blue: 0.04)   // #FFD60A
     static let green = Color(red: 0.19, green: 0.82, blue: 0.35)   // #30D158 selesai
     static let mint = Color(red: 0.4, green: 0.83, blue: 0.81)     // #66D4CF
     static let blue = Color(red: 0.04, green: 0.52, blue: 1.0)     // #0A84FF memproses
     static let purple = Color(red: 0.75, green: 0.35, blue: 0.95)  // #BF5AF2 memproses (AI)
     static let pink = Color(red: 1.0, green: 0.22, blue: 0.56)     // #FF375F
-    static let chip = Color.white.opacity(0.12)
+    static let chip = Color.white.opacity(0.1)
+    static let secondary = Color.white.opacity(0.72)               // teks transkrip yang sudah final
     static let muted = Color.white.opacity(0.55)                   // ±6:1 di atas hitam
 
-    static let record = LinearGradient(colors: [red, orange], startPoint: .leading, endPoint: .trailing)
-    static let process = LinearGradient(colors: [blue, purple], startPoint: .leading, endPoint: .trailing)
+    static let record = LinearGradient(colors: [pink, red, orange], startPoint: .leading, endPoint: .trailing)
+    static let process = LinearGradient(colors: [blue, purple, pink], startPoint: .leading, endPoint: .trailing)
     static let done = LinearGradient(colors: [green, mint], startPoint: .leading, endPoint: .trailing)
-    static let brand = LinearGradient(colors: [pink, red, orange], startPoint: .topLeading, endPoint: .bottomTrailing)
+    static let brand = LinearGradient(colors: [pink, orange, yellow], startPoint: .topLeading, endPoint: .bottomTrailing)
+    static let partial = LinearGradient(colors: [yellow, orange], startPoint: .leading, endPoint: .trailing)
+    /// Warna batang equalizer dan konfeti.
+    static let confetti: [Color] = [pink, orange, yellow, green, blue, purple]
+}
+
+/// Tipografi: SF Pro untuk teks (ringan, mudah dibaca), SF Pro Rounded untuk angka dan judul (ramah, ceria).
+/// Bobot dibatasi regular-semibold agar tidak terasa berat.
+private enum Typo {
+    static let live = Font.system(size: 15, weight: .regular)
+    static let title = Font.system(size: 15, weight: .semibold, design: .rounded)
+    static let heading = Font.system(size: 17, weight: .semibold, design: .rounded)
+    static let label = Font.system(size: 12, weight: .medium)
+    static let small = Font.system(size: 11, weight: .medium)
+    static func number(_ size: CGFloat) -> Font {
+        .system(size: size, weight: .medium, design: .rounded).monospacedDigit()
+    }
 }
 
 /// Kurva animasi ala Dynamic Island: pegas cepat yang sedikit memantul sehingga bentuknya terasa "cair".
 enum Liquid {
     static let morph = Animation.spring(duration: 0.42, bounce: 0.22)
     static let appear = Animation.spring(duration: 0.6, bounce: 0.3)
-    static let hover = Animation.spring(duration: 0.3, bounce: 0.2)
+    static let hover = Animation.spring(duration: 0.3, bounce: 0.25)
     static let press = Animation.spring(duration: 0.22, bounce: 0.35)
+    static let pop = Animation.spring(duration: 0.35, bounce: 0.5)
     /// Isi baru muncul sedikit setelah bentuk mulai melebar; isi lama hilang cepat.
     static let contentIn = Animation.spring(duration: 0.32, bounce: 0.15).delay(0.06)
     static let contentOut = Animation.easeIn(duration: 0.08)
@@ -37,16 +57,16 @@ private func haptic() {
 }
 
 /// "Pulau" ala Dynamic Island. Gaya mengikuti docs/design-references: kartu hitam dengan cahaya warna sesuai
-/// status, satu hal utama yang besar (timer, transkrip live, judul rapat), dan tombol kapsul. Teks pelengkap
+/// status, satu hal utama per status (timer, transkrip live, judul rapat), dan tombol kapsul. Teks pelengkap
 /// (versi, shortcut, nama mic) sengaja tidak ditampilkan; semuanya tetap ada di menu bar.
 ///
-/// Prinsip performa:
-/// - Jendelanya berukuran tetap (IslandPanel.canvas); yang beranimasi hanya bentuk hitam di dalamnya. Isi pulau
-///   disusun sekali pada ukuran akhirnya lalu cukup dipotong oleh bentuk yang beranimasi.
-/// - Selama rapat (bisa berjam-jam) tidak ada animasi yang berjalan terus-menerus: gelombang suara dan cahaya
-///   hanya bergerak saat level suara berubah. Animasi kontinu (garis cahaya berputar) hanya saat memproses,
-///   yang berlangsung singkat, dan dirender lewat GPU.
-/// - Semua animasi dekoratif dimatikan bila "Reduce motion" aktif di macOS.
+/// Prinsip performa (lihat docs/DESIGN.md):
+/// - Jendelanya berukuran tetap; yang beranimasi hanya bentuk hitam di dalamnya. Isi dan cahaya disusun pada
+///   ukuran akhir lalu cukup dipotong oleh bentuk yang beranimasi.
+/// - Tanpa bayangan, mask, blur, atau gradien yang digambar ulang tiap frame. Yang beranimasi: opacity,
+///   transform, dan efek simbol bawaan macOS.
+/// - Selama rapat tidak ada animasi yang berjalan terus-menerus kecuali yang mengikuti suara.
+/// - Animasi dekoratif mati bila "Reduce motion" aktif di macOS.
 struct IslandView: View {
     @ObservedObject var state: AppState
     let meter: LiveMeter
@@ -127,12 +147,12 @@ struct IslandView: View {
     private var glow: some View {
         switch state.phase {
         case .idle:
-            Glow(color: Palette.pink, strength: state.expanded ? 0.35 : (hovering ? 0.22 : 0))
+            Glow(color: Palette.pink, strength: state.expanded ? 0.35 : (hovering ? 0.25 : 0))
         case .recording:
             if state.expanded {
                 LevelGlow(meter: meter)
             } else {
-                Glow(color: Palette.red, strength: 0.2, center: .leading, radius: 130)
+                Glow(color: Palette.red, strength: 0.22, center: .leading, radius: 130)
             }
         case .processing:
             Glow(color: Palette.purple, strength: 0.4)
@@ -185,10 +205,10 @@ struct IslandView: View {
             if state.starting {
                 ProgressView().controlSize(.mini)
             } else {
-                BrandMark(size: 18, bounce: hovering)
+                BrandMark(size: 18, active: hovering)
             }
             Text(state.starting ? "Menyiapkan" : "Catat rapat")
-                .font(.system(size: 12, weight: .semibold, design: .rounded))
+                .font(Typo.label)
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
         .contentShape(Rectangle())
@@ -210,14 +230,16 @@ struct IslandView: View {
                         RecordGlyph()
                     }
                     Text(state.starting ? "Menyiapkan…" : "Mulai catat")
-                        .font(.system(size: 16, weight: .bold, design: .rounded))
+                        .font(Typo.title)
                 }
                 .frame(maxWidth: .infinity)
                 .frame(height: 46)
                 .background(Capsule().fill(Palette.brand))
-                .overlay(Capsule().strokeBorder(Color.white.opacity(0.25), lineWidth: 1))
+                .overlay(Capsule().strokeBorder(Color.white.opacity(0.3), lineWidth: 1))
+                .foregroundStyle(.black.opacity(0.85))
             }
             .buttonStyle(PressableStyle())
+            .hoverLift()
             .disabled(state.starting)
             HStack(spacing: 8) {
                 toggleChip("Word", icon: "doc.richtext", isOn: $state.exportDocx)
@@ -237,12 +259,14 @@ struct IslandView: View {
             Spacer()
             if !state.marks.isEmpty {
                 Label("\(state.marks.count)", systemImage: "star.fill")
-                    .font(.system(size: 11, weight: .bold, design: .rounded))
+                    .font(Typo.small)
                     .foregroundStyle(Palette.orange)
                     .contentTransition(.numericText())
+                    .transition(.scale.combined(with: .opacity))
             }
             EqualizerBars(meter: meter, height: 14)
         }
+        .animation(Liquid.pop, value: state.marks.count)
         .frame(maxWidth: .infinity, maxHeight: .infinity)
         .contentShape(Rectangle())
         .onTapGesture(perform: expand)
@@ -262,35 +286,37 @@ struct IslandView: View {
             LiveText(meter: meter)
             if let warning = state.warning {
                 Label(warning, systemImage: "exclamationmark.triangle.fill")
-                    .font(.system(size: 10, weight: .medium))
+                    .font(.system(size: 10, weight: .regular))
                     .foregroundStyle(Palette.orange)
                     .lineLimit(2)
             }
             HStack(spacing: 8) {
                 Button {
                     haptic()
-                    withAnimation(Liquid.press) { controller.markImportant() }
+                    withAnimation(Liquid.pop) { controller.markImportant() }
                 } label: {
                     HStack(spacing: 6) {
                         Image(systemName: state.marks.isEmpty ? "star" : "star.fill")
                             .symbolEffect(.bounce, value: state.marks.count)
-                            .background(Burst(trigger: state.marks.count, color: Palette.orange))
+                            .background(Burst(trigger: state.marks.count, color: Palette.yellow))
                         Text("Penting")
                         if !state.marks.isEmpty {
                             Text("\(state.marks.count)")
-                                .font(.system(size: 11, weight: .bold, design: .rounded))
+                                .font(Typo.number(11))
                                 .contentTransition(.numericText())
                                 .padding(.horizontal, 6)
                                 .background(Capsule().fill(Palette.orange.opacity(0.3)))
+                                .transition(.scale.combined(with: .opacity))
                         }
                     }
-                    .font(.system(size: 12, weight: .semibold))
+                    .font(Typo.label)
                     .foregroundStyle(Palette.orange)
                     .padding(.horizontal, 12)
                     .frame(height: 30)
                     .background(Capsule().fill(Palette.chip))
                 }
                 .buttonStyle(PressableStyle())
+                .hoverLift()
                 .help("Tandai momen penting")
                 Spacer()
                 Button {
@@ -298,7 +324,7 @@ struct IslandView: View {
                     controller.stop()
                 } label: {
                     Image(systemName: "stop.fill")
-                        .font(.system(size: 14, weight: .bold))
+                        .font(.system(size: 13, weight: .semibold))
                         .frame(width: 38, height: 38)
                         .background(Circle().fill(Palette.record))
                         .overlay(Circle().strokeBorder(Color.white.opacity(0.25), lineWidth: 1))
@@ -307,6 +333,7 @@ struct IslandView: View {
                             .frame(width: 60, height: 60))
                 }
                 .buttonStyle(PressableStyle())
+                .hoverLift()
                 .help("Selesai & susun MoM")
                 .accessibilityLabel("Selesai dan susun MoM")
             }
@@ -319,17 +346,20 @@ struct IslandView: View {
         VStack(alignment: .leading, spacing: 12) {
             HStack(spacing: 8) {
                 Image(systemName: state.step == 0 ? "waveform" : "sparkles")
-                    .font(.system(size: 15, weight: .bold))
+                    .font(.system(size: 15, weight: .semibold))
                     .foregroundStyle(Palette.process)
                     .contentTransition(.symbolEffect(.replace))
                     .symbolEffect(.variableColor.iterative, options: .repeating)
                 Text(state.step == 0 ? "Mentranskrip" : "Menyusun MoM")
-                    .font(.system(size: 16, weight: .bold, design: .rounded))
+                    .font(Typo.title)
                     .contentTransition(.opacity)
+                if state.step != 0 {
+                    TypingDots()
+                }
                 Spacer()
                 if state.step == 0, let percent = stepPercent {
                     Text("\(percent)%")
-                        .font(.system(size: 15, weight: .bold, design: .rounded).monospacedDigit())
+                        .font(Typo.number(15))
                         .foregroundStyle(Palette.muted)
                         .contentTransition(.numericText())
                 }
@@ -360,13 +390,14 @@ struct IslandView: View {
         VStack(alignment: .leading, spacing: 10) {
             HStack(spacing: 6) {
                 CheckBadge()
+                    .background(Confetti())
                 Text("MoM siap").foregroundStyle(Palette.green)
                 Spacer()
                 iconButton("xmark", help: "Tutup") { controller.dismiss() }
             }
-            .font(.system(size: 12, weight: .bold))
+            .font(Typo.label)
             Text(state.result?.title ?? "Rapat")
-                .font(.system(size: 18, weight: .bold, design: .rounded))
+                .font(Typo.heading)
                 .lineLimit(1)
             HStack(spacing: 6) {
                 stat(state.result?.decisions ?? 0, "keputusan", icon: "checkmark.seal.fill", color: Palette.green)
@@ -399,10 +430,10 @@ struct IslandView: View {
                 Spacer()
                 iconButton("xmark", help: "Tutup") { controller.dismiss() }
             }
-            .font(.system(size: 12, weight: .bold))
+            .font(Typo.label)
             .foregroundStyle(Palette.orange)
             Text(state.errorMessage)
-                .font(.system(size: 12))
+                .font(.system(size: 12, weight: .regular))
                 .foregroundStyle(Palette.muted)
                 .lineLimit(3)
                 .textSelection(.enabled)
@@ -425,34 +456,36 @@ struct IslandView: View {
     ) -> some View {
         Button(action: action) {
             Label(title, systemImage: icon)
-                .font(.system(size: 12, weight: .bold))
+                .font(Typo.label)
                 .padding(.horizontal, 14)
                 .frame(height: 30)
                 .background(Capsule().fill(gradient))
                 .overlay(Capsule().strokeBorder(Color.white.opacity(0.22), lineWidth: 1))
         }
         .buttonStyle(PressableStyle())
+        .hoverLift()
     }
 
     private func iconButton(_ systemImage: String, help: String, action: @escaping () -> Void) -> some View {
         Button(action: action) {
             Image(systemName: systemImage)
-                .font(.system(size: 11, weight: .bold))
+                .font(.system(size: 11, weight: .semibold))
                 .contentTransition(.symbolEffect(.replace))
                 .frame(width: 28, height: 28)
                 .background(Circle().fill(Palette.chip))
         }
         .buttonStyle(PressableStyle())
+        .hoverLift()
         .help(help)
         .accessibilityLabel(help)
     }
 
     private func toggleChip(_ title: String, icon: String, isOn: Binding<Bool>) -> some View {
         Button {
-            withAnimation(Liquid.press) { isOn.wrappedValue.toggle() }
+            withAnimation(Liquid.pop) { isOn.wrappedValue.toggle() }
         } label: {
             Label(title, systemImage: isOn.wrappedValue ? "checkmark.circle.fill" : icon)
-                .font(.system(size: 11, weight: .semibold))
+                .font(Typo.small)
                 .foregroundStyle(isOn.wrappedValue ? Palette.blue : Palette.muted)
                 .contentTransition(.symbolEffect(.replace))
                 .padding(.horizontal, 10)
@@ -460,6 +493,7 @@ struct IslandView: View {
                 .background(Capsule().fill(isOn.wrappedValue ? Palette.blue.opacity(0.2) : Palette.chip))
         }
         .buttonStyle(PressableStyle())
+        .hoverLift()
         .help("Buat juga file Word (.docx)")
         .accessibilityLabel("Buat juga file Word")
         .accessibilityValue(isOn.wrappedValue ? "aktif" : "nonaktif")
@@ -468,12 +502,12 @@ struct IslandView: View {
     private func stat(_ value: Int, _ label: String?, icon: String, color: Color) -> some View {
         HStack(spacing: 4) {
             Image(systemName: icon).foregroundStyle(color)
-            Text("\(value)").font(.system(size: 12, weight: .bold, design: .rounded))
+            Text("\(value)").font(Typo.number(12))
             if let label {
                 Text(label).foregroundStyle(Palette.muted)
             }
         }
-        .font(.system(size: 11, weight: .medium))
+        .font(Typo.small)
         .padding(.horizontal, 8)
         .frame(height: 24)
         .background(Capsule().fill(Palette.chip))
@@ -482,29 +516,31 @@ struct IslandView: View {
 
 // MARK: - Ikon
 
-/// Logo aplikasi: bola bergradien merah muda-oranye dengan gelombang suara putih. Statis (tanpa biaya
-/// animasi); memantul sekali saat kursor masuk.
+/// Logo aplikasi: bola bergradien pink-oranye-kuning dengan gelombang suara. Statis (tanpa biaya animasi);
+/// saat disorot memantul, sedikit miring, dan gelombangnya "menyala" sekali.
 private struct BrandMark: View {
     let size: CGFloat
-    let bounce: Bool
+    let active: Bool
 
     var body: some View {
         Image(systemName: "waveform")
-            .font(.system(size: size * 0.5, weight: .heavy))
-            .foregroundStyle(.white)
-            .symbolEffect(.bounce, value: bounce)
+            .font(.system(size: size * 0.5, weight: .bold))
+            .foregroundStyle(.black.opacity(0.8))
+            .symbolEffect(.bounce, value: active)
             .frame(width: size, height: size)
             .background(Circle().fill(Palette.brand))
-            .overlay(Circle().strokeBorder(Color.white.opacity(0.3), lineWidth: 0.5))
+            .rotationEffect(.degrees(active ? -12 : 0))
+            .scaleEffect(active ? 1.12 : 1)
+            .animation(Liquid.pop, value: active)
     }
 }
 
-/// Ikon rekam di tombol Mulai: lingkaran putih dengan inti merah, seperti tombol rekam kamera.
+/// Ikon rekam di tombol Mulai: lingkaran dengan inti, seperti tombol rekam kamera.
 private struct RecordGlyph: View {
     var body: some View {
         ZStack {
-            Circle().strokeBorder(Color.white, lineWidth: 2.5)
-            Circle().fill(Color.white).padding(5)
+            Circle().strokeBorder(Color.black.opacity(0.8), lineWidth: 2.5)
+            Circle().fill(Palette.red).padding(5)
         }
         .frame(width: 22, height: 22)
     }
@@ -522,6 +558,7 @@ private struct CheckBadge: View {
                 .scaleEffect(drawn ? 2.2 : 1)
                 .opacity(drawn ? 0 : 0.8)
             Circle().fill(Palette.done)
+                .scaleEffect(drawn ? 1 : 0.4)
             CheckShape()
                 .trim(from: 0, to: drawn ? 1 : 0)
                 .stroke(Color.black, style: StrokeStyle(lineWidth: 2, lineCap: .round, lineJoin: .round))
@@ -532,7 +569,7 @@ private struct CheckBadge: View {
             if reduceMotion {
                 drawn = true
             } else {
-                withAnimation(.easeOut(duration: 0.55).delay(0.15)) { drawn = true }
+                withAnimation(.spring(duration: 0.6, bounce: 0.45).delay(0.12)) { drawn = true }
             }
         }
     }
@@ -545,6 +582,39 @@ private struct CheckShape: Shape {
         path.addLine(to: CGPoint(x: rect.minX + rect.width * 0.38, y: rect.maxY - rect.height * 0.1))
         path.addLine(to: CGPoint(x: rect.maxX, y: rect.minY + rect.height * 0.1))
         return path
+    }
+}
+
+/// Konfeti kecil berwarna yang menyembur sekali dari lencana saat MoM siap (±1 detik, lalu diam).
+private struct Confetti: View {
+    @State private var burst = false
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
+
+    private static let pieces: [(angle: Double, distance: Double, spin: Double)] = (0..<14).map { i in
+        (angle: Double(i) / 14 * 360 + Double(i % 3) * 9, distance: Double(26 + (i * 7) % 22),
+         spin: Double((i * 53) % 270) - 135)
+    }
+
+    var body: some View {
+        ZStack {
+            ForEach(Self.pieces.indices, id: \.self) { i in
+                let piece = Self.pieces[i]
+                let radians = piece.angle * .pi / 180
+                RoundedRectangle(cornerRadius: 1)
+                    .fill(Palette.confetti[i % Palette.confetti.count])
+                    .frame(width: i % 2 == 0 ? 3 : 5, height: i % 2 == 0 ? 6 : 3)
+                    .rotationEffect(.degrees(burst ? piece.spin : 0))
+                    .offset(x: burst ? CGFloat(cos(radians) * piece.distance) : 0,
+                            y: burst ? CGFloat(sin(radians) * piece.distance * 0.6 + 6) : 0)
+                    .opacity(burst ? 0 : 1)
+            }
+        }
+        .allowsHitTesting(false)
+        .accessibilityHidden(true)
+        .onAppear {
+            guard !reduceMotion else { return }
+            withAnimation(.easeOut(duration: 1.0).delay(0.2)) { burst = true }
+        }
     }
 }
 
@@ -572,9 +642,30 @@ private struct Burst: View {
     }
 }
 
+/// Tiga titik "sedang menulis" saat Claude menyusun MoM. Kecil dan hanya selama memproses.
+private struct TypingDots: View {
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
+
+    var body: some View {
+        HStack(spacing: 3) {
+            ForEach(0..<3, id: \.self) { i in
+                Circle()
+                    .fill(Palette.muted)
+                    .frame(width: 4, height: 4)
+                    .phaseAnimator([false, true]) { dot, up in
+                        dot.offset(y: up && !reduceMotion ? -3 : 0)
+                    } animation: { _ in
+                        .easeInOut(duration: 0.4).delay(Double(i) * 0.13)
+                    }
+            }
+        }
+        .accessibilityHidden(true)
+    }
+}
+
 // MARK: - Cahaya dan progres
 
-/// Cahaya lembut dari tepi atas pulau. Gradien statis: digambar sekali, murah.
+/// Cahaya lembut dari tepi atas pulau. Gradien statis; kekuatan diatur lewat opacity lapisan (murah).
 private struct Glow: View {
     let color: Color
     let strength: Double
@@ -582,7 +673,6 @@ private struct Glow: View {
     var radius: CGFloat = 240
 
     var body: some View {
-        // Warna gradien tetap; kekuatan diatur lewat opacity lapisan (murah, tanpa menggambar ulang gradien).
         RadialGradient(colors: [color, .clear], center: center, startRadius: 0, endRadius: radius)
             .opacity(strength)
             .animation(.easeOut(duration: 0.4), value: strength)
@@ -590,8 +680,7 @@ private struct Glow: View {
     }
 }
 
-/// Cahaya merah-oranye yang menguat saat ada suara. Level suara hanya dikirim bila berubah cukup terlihat,
-/// jadi cahaya ini jarang digambar ulang.
+/// Cahaya merah-oranye yang menguat saat ada suara (lewat opacity, tanpa menggambar ulang gradien).
 private struct LevelGlow: View {
     @ObservedObject var meter: LiveMeter
 
@@ -624,21 +713,26 @@ private struct Aura: View {
     }
 }
 
-/// Garis progres tipis bergradien yang mengisi dengan pegas lembut.
+/// Garis progres tipis bergradien dengan "kepala" bercahaya yang mengisi dengan pegas lembut.
 private struct ProgressBar: View {
     let fraction: Double
 
     var body: some View {
         GeometryReader { geo in
+            let width = max(8, geo.size.width * fraction)
             ZStack(alignment: .leading) {
                 Capsule().fill(Palette.chip)
                 Capsule()
                     .fill(Palette.process)
-                    .frame(width: max(8, geo.size.width * fraction))
+                    .frame(width: width)
+                Circle()
+                    .fill(Color.white)
+                    .frame(width: 6, height: 6)
+                    .offset(x: width - 6)
             }
         }
         .frame(height: 6)
-        .animation(.spring(duration: 0.6, bounce: 0.1), value: fraction)
+        .animation(.spring(duration: 0.6, bounce: 0.15), value: fraction)
         .accessibilityElement()
         .accessibilityLabel("Progres")
         .accessibilityValue("\(Int(fraction * 100)) persen")
@@ -660,32 +754,53 @@ private struct ElapsedText: View {
 
     var body: some View {
         Text(timeString(meter.elapsed))
-            .font(.system(size: size, weight: .bold, design: .rounded).monospacedDigit())
+            .font(Typo.number(size))
             .contentTransition(.numericText())
             .animation(.snappy(duration: 0.25), value: Int(meter.elapsed))
     }
 }
 
-/// Transkrip live besar; baris lama memudar ke atas seperti pada referensi.
+/// Transkrip live. Selalu menampilkan kata-kata TERBARU: teks lama dipotong di depan (bukan di belakang),
+/// sehingga ucapan terakhir tidak pernah terpotong di kanan. Kata yang masih dikenali (bisa berubah) tampil
+/// dengan gradien kuning-oranye, lalu berubah putih begitu final.
 private struct LiveText: View {
     @ObservedObject var meter: LiveMeter
 
+    /// Kira-kira muat 3 baris pada lebar pulau dengan huruf 15 pt.
+    private static let maxCharacters = 150
+
     var body: some View {
-        Text(meter.liveText.isEmpty ? "Mendengarkan…" : meter.liveText)
-            .font(.system(size: 17, weight: .semibold, design: .rounded))
-            .lineLimit(3)
-            .frame(maxWidth: .infinity, alignment: .bottomLeading)
-            .frame(height: 66, alignment: .bottomLeading)
-            // Gradien langsung di warna teks (bukan mask, yang memaksa render offscreen setiap frame).
-            .foregroundStyle(meter.liveText.isEmpty
-                ? AnyShapeStyle(Palette.muted)
-                : AnyShapeStyle(LinearGradient(stops: [.init(color: .white.opacity(0.3), location: 0),
-                                                       .init(color: .white, location: 0.5)],
-                                               startPoint: .top, endPoint: .bottom)))
+        Group {
+            if meter.liveText.isEmpty && meter.livePartial.isEmpty {
+                Text("Mendengarkan…").foregroundStyle(Palette.muted)
+            } else {
+                let partial = meter.livePartial
+                let committed = Self.tail(meter.liveText, max(0, Self.maxCharacters - partial.count))
+                let gap = committed.isEmpty || partial.isEmpty ? "" : " "
+                let head: Text = Text(committed).foregroundStyle(Palette.secondary)
+                let newest: Text = Text(Self.tail(partial, Self.maxCharacters)).foregroundStyle(Palette.partial)
+                head + Text(gap) + newest
+            }
+        }
+        .font(Typo.live)
+        .lineSpacing(2)
+        .lineLimit(3)
+        .truncationMode(.head)
+        .frame(maxWidth: .infinity, alignment: .bottomLeading)
+        .frame(height: 62, alignment: .bottomLeading)
+        .animation(.easeOut(duration: 0.12), value: meter.livePartial)
+    }
+
+    /// Bagian akhir teks (maksimal `limit` karakter), dipotong di batas kata dan diawali "…".
+    static func tail(_ text: String, _ limit: Int) -> String {
+        guard text.count > limit else { return text }
+        let suffix = text.suffix(limit)
+        let start = suffix.firstIndex(of: " ").map { suffix.index(after: $0) } ?? suffix.startIndex
+        return "…" + suffix[start...]
     }
 }
 
-/// Equalizer 5 batang bergradien yang mengikuti level suara. Hanya bergerak saat level berubah (bukan animasi
+/// Equalizer 5 batang warna-warni yang mengikuti level suara. Hanya bergerak saat level berubah (bukan animasi
 /// per frame), dengan pegas sehingga gerakannya tetap mulus. Saat hening, batang turun dan meredup.
 private struct EqualizerBars: View {
     @ObservedObject var meter: LiveMeter
@@ -693,6 +808,7 @@ private struct EqualizerBars: View {
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
     private static let weights: [Double] = [0.55, 0.9, 1.0, 0.8, 0.6]
+    private static let colors: [Color] = [Palette.pink, Palette.red, Palette.orange, Palette.yellow, Palette.orange]
 
     var body: some View {
         let level = Double(min(max(meter.level, 0), 1))
@@ -703,13 +819,13 @@ private struct EqualizerBars: View {
                 let wobble = 0.65 + 0.35 * abs(sin(seed + Double(i) * 1.7))
                 let fraction = level < 0.04 ? 0.18 : min(1, 0.25 + level * 1.4 * Self.weights[i] * wobble)
                 Capsule()
-                    .fill(Palette.record)
+                    .fill(Self.colors[i])
                     .frame(width: 3, height: max(3, height * fraction))
             }
         }
         .frame(height: height)
         .opacity(level < 0.04 ? 0.5 : 1)
-        .animation(reduceMotion ? nil : .spring(duration: 0.25, bounce: 0.3), value: meter.level)
+        .animation(reduceMotion ? nil : .spring(duration: 0.25, bounce: 0.35), value: meter.level)
         .accessibilityHidden(true)
     }
 }
@@ -733,4 +849,21 @@ private struct PressableStyle: ButtonStyle {
             .brightness(configuration.isPressed ? -0.06 : 0)
             .animation(Liquid.press, value: configuration.isPressed)
     }
+}
+
+/// Tombol sedikit "terangkat" dan lebih terang saat kursor di atasnya (transform + brightness, murah).
+private struct HoverLift: ViewModifier {
+    @State private var hovering = false
+
+    func body(content: Content) -> some View {
+        content
+            .scaleEffect(hovering ? 1.05 : 1)
+            .brightness(hovering ? 0.06 : 0)
+            .animation(Liquid.hover, value: hovering)
+            .onHover { hovering = $0 }
+    }
+}
+
+private extension View {
+    func hoverLift() -> some View { modifier(HoverLift()) }
 }

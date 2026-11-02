@@ -23,6 +23,7 @@ pesan galat/screenshot di langkah pertama yang gagal. Bug diperbaiki sebagai 2.0
 | 7h | (Permintaan 2.3.0) Tampilan kurang mencolok, terlalu banyak teks | 2.3.1: desain ulang pulau (cahaya warna per status, tombol gradien, teks pelengkap dihapus). Cek tiap status: siap, merekam (ringkas/diperluas), memproses, selesai, gagal |
 | 7i | (Permintaan 2.3.1) Ikon & animasi lebih menarik, lebih mulus dan ringan | 2.3.2: logo, equalizer, garis cahaya saat memproses, centang & riak, getaran trackpad. Cek kelancaran dan CPU (Activity Monitor) saat merekam |
 | 7j | (Temuan 2.3.2) Animasi sedikit lag | 2.3.3: tanpa bayangan/mask/gradien berputar; cahaya lewat opacity; Python berprioritas rendah. Cek: buka-tutup pulau saat siap, merekam, dan memproses |
+| 7k | (Temuan 2.3.3) Transkrip live tidak real time & terpotong di kanan; huruf terlalu tebal; UI kurang hidup | 2.3.4: kirim susulan kata terakhir, potong di depan, kata sementara berwarna, kamus untuk pengenal suara; huruf lebih ringan; animasi ceria. Cek: bicara panjang, kata terakhir tampil; teks tidak terpotong |
 | 7 | Tunggu | Kartu "MoM siap" + notifikasi; **Buka MoM** membuka MoM (.md, atau .docx bila "Buat juga Word" dicentang) berisi "Momen Penting" |
 | 8 | Izinkan Screen & System Audio Recording, buka ulang app, putar video YouTube sambil merekam **dengan headphone** | Suara video ikut tertranskrip di MoM |
 | 9 | Meeting Zoom/Meet sungguhan ≥ 15 menit | Suara peserta lain dan suaramu tercatat; MoM per agenda |

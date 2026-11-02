@@ -1,13 +1,21 @@
 import AVFoundation
 import Speech
 
+/// Teks live: bagian yang sudah final dan kata-kata yang masih dikenali (bisa berubah).
+struct Caption: Equatable {
+    var committed: String
+    var partial: String = ""
+}
+
 /// Transkrip live (perkiraan cepat) dengan pengenal suara bawaan macOS, bahasa Indonesia.
 ///
 /// Hanya untuk ditampilkan selama rapat. Notulen akhir tetap dibuat dari rekaman lengkap oleh Whisper/mesin
 /// pilihan yang lebih akurat. Sesi diputar ulang tiap ±50 detik karena pengenal Apple dibatasi ±1 menit.
 final class LiveTranscriber {
     private let recognizer = SFSpeechRecognizer(locale: Locale(identifier: "id-ID"))
-    private let onText: (String) -> Void
+    private let onText: (Caption) -> Void
+    /// Istilah dari kamus (mis. FE, deploy, flagging) agar pengenal suara lebih tepat menangkap istilah teknis.
+    private let terms: [String]
     /// Catatan untuk rekaman.log (izin, error pengenal suara).
     var onLog: ((String) -> Void)?
     private let lock = NSLock()
@@ -17,15 +25,19 @@ final class LiveTranscriber {
     private var committed = ""
     private var partial = ""
     private var running = false
-    /// Waktu terakhir teks dikirim ke UI (nanodetik), untuk membatasi update ±4x per detik.
+    /// Waktu terakhir teks dikirim ke UI (nanodetik), untuk membatasi update ±7x per detik.
     private var lastEmit: UInt64 = 0
+    /// Teks yang tertahan pembatas; dikirim menyusul agar kata terakhir sebelum jeda tidak pernah hilang.
+    private var pending: Caption?
+    private var flushScheduled = false
     /// Pengenal di perangkat bisa gagal (model bahasa belum terunduh); setelah itu pakai pengenal online Apple.
     private var forceServer = false
     /// Error beruntun tanpa satu hasil pun; berhenti mencoba setelah beberapa kali agar tidak berputar terus.
     private var failures = 0
-    private static let minEmitInterval: UInt64 = 250_000_000
+    private static let minEmitInterval: UInt64 = 150_000_000
 
-    init(onText: @escaping (String) -> Void) {
+    init(terms: [String] = [], onText: @escaping (Caption) -> Void) {
+        self.terms = Array(terms.prefix(100))
         self.onText = onText
     }
 
@@ -34,8 +46,8 @@ final class LiveTranscriber {
             guard let self else { return }
             guard status == .authorized else {
                 self.onLog?("Transkrip live: izin Speech Recognition tidak diberikan (\(status.rawValue))")
-                self.onText("Transkrip live nonaktif: izinkan Meeting Notes di System Settings → Privacy & "
-                    + "Security → Speech Recognition, lalu buka ulang app.")
+                self.onText(Caption(committed: "Transkrip live nonaktif: izinkan Meeting Notes di System Settings → "
+                    + "Privacy & Security → Speech Recognition, lalu buka ulang app."))
                 return
             }
             self.onLog?("Transkrip live: izin Speech Recognition OK")
@@ -78,13 +90,15 @@ final class LiveTranscriber {
     private func beginRequest() {
         guard let recognizer, recognizer.isAvailable else {
             onLog?("Transkrip live: pengenal suara id-ID tidak tersedia")
-            onText("Transkrip live tidak tersedia: nyalakan Dictation di System Settings → Keyboard, lalu buka "
-                + "ulang app.")
+            onText(Caption(committed: "Transkrip live tidak tersedia: nyalakan Dictation di System Settings → "
+                + "Keyboard, lalu buka ulang app."))
             return
         }
         let request = SFSpeechAudioBufferRecognitionRequest()
         request.shouldReportPartialResults = true
         request.addsPunctuation = true
+        request.taskHint = .dictation
+        request.contextualStrings = terms
         lock.lock()
         let onDevice = recognizer.supportsOnDeviceRecognition && !forceServer
         lock.unlock()
@@ -119,8 +133,9 @@ final class LiveTranscriber {
                 if failures <= 3 {
                     self.beginRequest()
                 } else {
-                    self.onText("Transkrip live gagal: \(error.localizedDescription) Pastikan Dictation menyala "
-                        + "(System Settings → Keyboard) dan internet tersambung. Rekaman tetap berjalan.")
+                    self.onText(Caption(committed: "Transkrip live gagal: \(error.localizedDescription) Pastikan "
+                        + "Dictation menyala (System Settings → Keyboard) dan internet tersambung. Rekaman tetap "
+                        + "berjalan."))
                 }
                 return
             }
@@ -138,14 +153,40 @@ final class LiveTranscriber {
             }
             // Simpan secukupnya saja; yang ditampilkan hanya 2-3 baris terakhir.
             if self.committed.count > 600 { self.committed = String(self.committed.suffix(400)) }
-            let display = (self.committed + " " + self.partial).trimmingCharacters(in: .whitespaces)
+            let caption = Caption(committed: self.committed.trimmingCharacters(in: .whitespaces),
+                                  partial: self.partial)
             // Hasil akhir selalu dikirim; hasil sementara dibatasi agar UI tidak digambar ulang tiap kata.
             let now = DispatchTime.now().uptimeNanoseconds
             let isFinal = result?.isFinal ?? true
-            let shouldEmit = isFinal || now - self.lastEmit >= Self.minEmitInterval
-            if shouldEmit { self.lastEmit = now }
+            let elapsed = now - self.lastEmit
+            let shouldEmit = isFinal || elapsed >= Self.minEmitInterval
+            var scheduleFlush = false
+            if shouldEmit {
+                self.lastEmit = now
+                self.pending = nil
+            } else {
+                self.pending = caption
+                scheduleFlush = !self.flushScheduled
+                self.flushScheduled = true
+            }
             self.lock.unlock()
-            if shouldEmit { self.onText(String(display.suffix(220))) }
+            if shouldEmit { self.onText(caption) }
+            if scheduleFlush { self.scheduleFlush(after: Self.minEmitInterval - elapsed) }
+        }
+    }
+
+    /// Kirim teks yang tertahan pembatas begitu jedanya habis.
+    private func scheduleFlush(after nanoseconds: UInt64) {
+        DispatchQueue.global(qos: .userInitiated).asyncAfter(deadline: .now() + .nanoseconds(Int(nanoseconds))) {
+            [weak self] in
+            guard let self else { return }
+            self.lock.lock()
+            let caption = self.pending
+            self.pending = nil
+            self.flushScheduled = false
+            if caption != nil { self.lastEmit = DispatchTime.now().uptimeNanoseconds }
+            self.lock.unlock()
+            if let caption { self.onText(caption) }
         }
     }
 }
