@@ -31,11 +31,25 @@ Target: aplikasi pencatat rapat ala Fireflies yang berjalan langsung di Mac, tan
 | 3.2.0 | Bentuk pulau ala notch app modern: island dengan bahu melengkung (tanpa sudut siku) atau pill melayang, dipilih di menu bar | ✅ Kode selesai, menunggu QA di Mac |
 | 3.3.0 | Desain ulang panel Siap & Merekam: tombol Mulai ringkas, sapaan, chip Word/Live, kartu kaca, efek riak/kilau/masuk bertahap | ✅ Kode selesai, menunggu QA di Mac |
 | 3.4.0 | Audio meeting lewat Core Audio tap, peredam derau mic, transkrip live dua lapis (Apple instan → koreksi Whisper) | ✅ Kode selesai, menunggu QA di Mac |
-| 3.5.0 | Perpustakaan rapat, pencarian, dan "Tanya ke rapat" | |
-| 3.6.0 | Label pembicara per orang untuk peserta online (Whisper lokal) | Mic vs meeting sudah dibedakan di 2.1.0; per orang sudah ada lewat mesin cloud di 1.2.0 |
+| 3.5.0 | **Ringan untuk Mac 8 GB**: model Whisper hemat memori, penjaga tekanan memori (koreksi live melambat, rekaman tidak pernah terganggu), pemakaian RAM/CPU dicatat di log | Rencana |
+| 3.6.0 | **Audio meeting lebih bagus**: verifikasi Core Audio tap di Mac pengguna, opsi hanya aplikasi meeting, deteksi suara peserta terlalu pelan/pecah, sinkron mic–meeting untuk rapat panjang | Rencana |
+| 3.7.0 | **Transkrip live menyerupai ucapan**: akurasi diukur otomatis (live vs final), jeda koreksi Whisper lebih pendek, kamus tim lebih kuat, teks tidak melompat saat dikoreksi | Rencana |
+| 3.8.0 | Perpustakaan rapat, pencarian, dan "Tanya ke rapat" | |
+| 3.9.0 | Label pembicara per orang untuk peserta online (Whisper lokal) | Mic vs meeting sudah dibedakan di 2.1.0; per orang sudah ada lewat mesin cloud di 1.2.0 |
 
 Referensi UI untuk 2.0.0 ada di [`design-references/`](design-references/). Status lengkap: [CHECKLIST.md](CHECKLIST.md).
 
 ## Perangkat target
 
 MacBook Pro 13" M1 (2020), RAM 8 GB, macOS Tahoe 26. Rapat 1–4 jam, bahasa campuran Indonesia–Inggris.
+
+### Prinsip untuk perangkat target (berlaku untuk 3.5.0 dan seterusnya)
+
+- **Anggaran RAM saat rapat**: macOS + Zoom/Teams + browser sudah memakai ±5–6 GB dari 8 GB. Meeting Notes
+  (app + worker Whisper) ditargetkan **≤ 1 GB** selama rapat; model besar hanya dimuat saat dibutuhkan.
+- **Rekaman tidak pernah dikorbankan**: bila Mac berat, yang dikurangi transkrip live/koreksi Whisper,
+  bukan perekaman. Sisa pekerjaan dikejar setelah rapat.
+- **Diukur, bukan ditebak**: pemakaian RAM/CPU, keterlambatan koreksi live, dan akurasi live vs final dicatat
+  di log, sehingga setiap optimasi terbukti dengan angka.
+- **macOS 26**: API terbaru boleh dipakai (Core Audio tap, SpeechAnalyzer) dengan cadangan yang aman.
+- **Tanpa regresi**: setiap perbaikan disertai tes otomatis; QA rapat ≥ 1 jam sebelum versi dianggap stabil.
