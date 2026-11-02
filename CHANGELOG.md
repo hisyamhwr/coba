@@ -2,6 +2,20 @@
 
 Format versi: `MAYOR.FITUR.PERBAIKAN` (lihat [docs/ROADMAP.md](docs/ROADMAP.md)).
 
+## 2.3.1
+
+- **Tampilan pulau lebih mencolok dan bersih**, mengikuti referensi desain:
+  - Cahaya warna di dalam pulau sesuai status: merah-oranye saat merekam (ikut berdenyut mengikuti suara),
+    biru-ungu saat memproses, hijau saat MoM siap.
+  - Tombol besar **Mulai catat** bergradien.
+  - Transkrip live lebih besar, dengan baris lama memudar ke atas.
+  - Tombol stop bercahaya; tombol **Penting** dengan penghitung.
+  - Memproses: satu garis progres dengan persentase nyata saat mentranskrip.
+  - Kartu hasil: judul besar, ringkasan keputusan/tugas/momen penting dalam kapsul, dan tombol ikon
+    (Salin berubah jadi ✓ sesaat setelah diklik).
+- **Teks yang tidak perlu dihapus** dari pulau: versi, shortcut, nama mic, detail langkah, dan label "Meeting
+  Notes". Pilihan Word kini berupa kapsul kecil "Word". Menu bar juga tidak lagi menampilkan shortcut.
+
 ## 2.3.0
 
 Optimasi: lebih akurat tanpa menunggu lebih lama, tanpa perlu memilih mode. Pilihan "Mode akurat" dari 2.2.0

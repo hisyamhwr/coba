@@ -47,11 +47,13 @@ final class AppState: ObservableObject {
     /// Ukuran pulau per status. Jendelanya berukuran tetap; hanya bentuk pulau di dalamnya yang beranimasi.
     var islandSize: CGSize {
         switch phase {
-        case .idle: return expanded ? CGSize(width: 320, height: 142) : CGSize(width: 170, height: 32)
-        case .recording: return expanded ? CGSize(width: 460, height: 178) : CGSize(width: 250, height: 32)
-        case .processing: return CGSize(width: 380, height: 100)
-        case .done: return CGSize(width: 440, height: 136)
-        case .failed: return CGSize(width: 440, height: 128)
+        case .idle: return expanded ? CGSize(width: 300, height: 116) : CGSize(width: 150, height: 32)
+        case .recording:
+            // Peringatan (mis. izin audio meeting) menambah satu baris.
+            return expanded ? CGSize(width: 460, height: warning == nil ? 180 : 204) : CGSize(width: 240, height: 32)
+        case .processing: return CGSize(width: 360, height: 70)
+        case .done: return CGSize(width: 460, height: 130)
+        case .failed: return CGSize(width: 440, height: 150)
         }
     }
 

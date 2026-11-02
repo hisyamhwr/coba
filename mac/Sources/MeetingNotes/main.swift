@@ -59,7 +59,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         let item = NSStatusBar.system.statusItem(withLength: NSStatusItem.variableLength)
         item.button?.image = NSImage(systemSymbolName: "waveform", accessibilityDescription: "Meeting Notes")
         let menu = NSMenu()
-        menu.addItem(NSMenuItem(title: "Mulai Catat  (⌃⌥M)", action: #selector(toggle), keyEquivalent: ""))
+        menu.addItem(NSMenuItem(title: "Mulai catat", action: #selector(toggle), keyEquivalent: ""))
         menu.addItem(NSMenuItem(title: "Buka folder notulen", action: #selector(openFolder), keyEquivalent: ""))
         menu.addItem(.separator())
         menu.addItem(NSMenuItem(title: "Buat juga Word (.docx)", action: #selector(toggleDocx), keyEquivalent: ""))
@@ -85,9 +85,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             }
         }
         switch controller.state.phase {
-        case .recording: first.title = "Selesai & Susun MoM  (⌃⌥M)"
+        case .recording: first.title = "Selesai & susun MoM"
         case .processing: first.title = "Sedang memproses…"
-        default: first.title = "Mulai Catat  (⌃⌥M)"
+        default: first.title = "Mulai catat"
         }
     }
 
