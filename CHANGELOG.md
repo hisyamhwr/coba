@@ -44,6 +44,10 @@ lokal dan gratis (tanpa cloud).
   ke ±230 MB (diuji dengan simulasi rapat 70 menit; sisa audio yang ditranskripsi setelah rapat selesai ±85
   detik).
 
+**Diuji dengan Claude sungguhan** pada transkrip realistis rapat sprint 70 menit (±7.700 kata, penuh salah dengar
+ASR): MoM selesai dalam 55 detik dengan 22 koreksi istilah (tidak ada salah dengar yang tersisa), 10 keputusan,
+42 action item lengkap dengan PIC dan tenggat, 14 risiko/blocker, dan momen penting di menit yang ditandai.
+
 ## 2.3.4
 
 - **Transkrip live lebih real time dan tidak terpotong.**
