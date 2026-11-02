@@ -45,6 +45,7 @@ final class MeetingController {
             }
         } : nil
         let capture = AudioCapture(output: dir.appendingPathComponent("meeting.wav"))
+        live?.onLog = { line in capture.note(line) }
         capture.onSamples = live.map { transcriber in { buffer in transcriber.append(buffer) } }
         capture.onLevel = { [weak self] level in
             Task { @MainActor in self?.meter.level = level }

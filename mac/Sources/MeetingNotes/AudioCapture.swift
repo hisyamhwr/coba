@@ -51,6 +51,12 @@ final class AudioCapture: NSObject, SCStreamOutput, SCStreamDelegate {
     private var silenceReported = false
     private var systemFrames = 0
     private var systemPeak: Float = 0
+    // Puncak per 10 detik untuk garis waktu di rekaman.log (mis. audio meeting hilang saat headset dipasang).
+    private var windowMicPeak: Float = 0
+    private var windowSystemPeak: Float = 0
+    private var windowSystemFrames = 0
+    private var systemRestarts = 0
+    private let logQueue = DispatchQueue(label: "meetingnotes.log")
     private let lock = NSLock()
     private let systemQueue = DispatchQueue(label: "meetingnotes.system-audio")
     private let writeQueue = DispatchQueue(label: "meetingnotes.writer")
@@ -69,12 +75,15 @@ final class AudioCapture: NSObject, SCStreamOutput, SCStreamDelegate {
     func note(_ line: String) {
         let stamp = Self.logTime.string(from: Date())
         let data = Data("\(stamp)  \(line)\n".utf8)
-        if let handle = try? FileHandle(forWritingTo: logURL) {
-            handle.seekToEndOfFile()
-            handle.write(data)
-            try? handle.close()
-        } else {
-            try? data.write(to: logURL)
+        let url = logURL
+        logQueue.async {
+            if let handle = try? FileHandle(forWritingTo: url) {
+                handle.seekToEndOfFile()
+                handle.write(data)
+                try? handle.close()
+            } else {
+                try? data.write(to: url)
+            }
         }
     }
 
@@ -139,6 +148,7 @@ final class AudioCapture: NSObject, SCStreamOutput, SCStreamDelegate {
         scStream = nil
         writeQueue.sync { file = nil }
         note("Selesai\n" + diagnostics())
+        logQueue.sync {}
     }
 
     /// Ringkasan kondisi rekaman untuk rekaman.log.
@@ -161,7 +171,7 @@ final class AudioCapture: NSObject, SCStreamOutput, SCStreamDelegate {
         Mikrofon        : \(micName) (\(micFormatText)), izin \(micStatus)
         Mic diterima    : \(String(format: "%.1f", Double(micFrames) / 16000)) detik, puncak \(Self.describe(micPeak))
         Mic dipasang ulang: \(micRestarts)x
-        Audio sistem    : \(systemAudioActive ? "aktif" : "TIDAK aktif"), \
+        Audio sistem    : \(systemAudioActive ? "aktif" : "TIDAK aktif"), dipasang ulang \(systemRestarts)x, \
         \(String(format: "%.1f", Double(sysFrames) / 16000)) detik diterima, puncak \(Self.describe(sysPeak))
 
         """
@@ -188,6 +198,20 @@ final class AudioCapture: NSObject, SCStreamOutput, SCStreamDelegate {
         try engine.start()
     }
 
+    /// Satu baris per 10 detik: level mic dan audio meeting, agar terlihat kapan salah satunya hening.
+    private func logWindow() {
+        lock.lock()
+        let sysPeak = windowSystemPeak
+        let sysFrames = windowSystemFrames
+        windowSystemPeak = 0
+        windowSystemFrames = 0
+        lock.unlock()
+        let micText = Self.describe(windowMicPeak)
+        windowMicPeak = 0
+        let sysText = sysFrames == 0 ? "TIDAK ADA DATA" : Self.describe(sysPeak)
+        note("[\(micFrames / 16000) dtk] mic \(micName): \(micText) | audio meeting: \(sysText)")
+    }
+
     private func restartMic() {
         guard running else { return }
         engine.inputNode.removeTap(onBus: 0)
@@ -195,7 +219,9 @@ final class AudioCapture: NSObject, SCStreamOutput, SCStreamDelegate {
         micRestarts += 1
         do {
             try startMic()
+            note("Perangkat audio berganti; mic dipasang ulang: \(micName) (\(micFormatText))")
         } catch {
+            note("Mic gagal dipasang ulang: \(error.localizedDescription)")
             onProblem?("Mic terputus dan gagal disambung ulang. Selesaikan lalu mulai rekam lagi.")
         }
     }
@@ -207,7 +233,10 @@ final class AudioCapture: NSObject, SCStreamOutput, SCStreamDelegate {
         var peak: Float = 0
         vDSP_maxmgv(mic, 1, &peak, vDSP_Length(mic.count))
         micPeak = max(micPeak, peak)
+        windowMicPeak = max(windowMicPeak, peak)
+        let before = micFrames / 160_000
         micFrames += mic.count
+        if micFrames / 160_000 != before { logWindow() }
         // Sampel nol mutlak selama 3 detik = macOS memberi hening karena izin mic tidak cocok lagi dengan
         // aplikasi (terjadi setelah build ulang). Ruangan sepi pun tetap punya derau, tidak pernah nol mutlak.
         if !silenceReported, micFrames >= 48000, micPeak == 0 {
@@ -290,6 +319,8 @@ final class AudioCapture: NSObject, SCStreamOutput, SCStreamDelegate {
             lock.lock()
             systemFrames += samples.count
             systemPeak = max(systemPeak, peak)
+            windowSystemFrames += samples.count
+            windowSystemPeak = max(windowSystemPeak, peak)
             systemBuffer.append(contentsOf: samples)
             if systemBuffer.count > Self.maxSystemBacklog {
                 systemBuffer.removeFirst(systemBuffer.count - Self.maxSystemBacklog)
@@ -298,8 +329,28 @@ final class AudioCapture: NSObject, SCStreamOutput, SCStreamDelegate {
         }
     }
 
+    /// macOS bisa menghentikan tangkapan audio (mis. perangkat output berganti ke headset). Sebelumnya audio
+    /// meeting lalu hilang diam-diam sampai rapat selesai; sekarang dipasang ulang otomatis.
     func stream(_ stream: SCStream, didStopWithError error: Error) {
         systemAudioActive = false
+        note("Audio sistem berhenti: \(error.localizedDescription)")
+        Task { [weak self] in
+            guard let self else { return }
+            for attempt in 1...5 {
+                try? await Task.sleep(nanoseconds: 1_000_000_000)
+                guard self.running else { return }
+                do {
+                    try await self.startSystemAudio()
+                    self.systemAudioActive = true
+                    self.systemRestarts += 1
+                    self.note("Audio sistem dipasang ulang (percobaan \(attempt))")
+                    return
+                } catch {
+                    self.note("Gagal memasang ulang audio sistem: \(error.localizedDescription)")
+                }
+            }
+            self.onProblem?("Audio meeting terputus dan gagal disambung ulang. Selesaikan lalu mulai rekam lagi.")
+        }
     }
 
     // MARK: - Konversi format

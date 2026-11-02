@@ -2,6 +2,15 @@
 
 Format versi: `MAYOR.FITUR.PERBAIKAN` (lihat [docs/ROADMAP.md](docs/ROADMAP.md)).
 
+## 2.0.10
+
+- Transkrip live: error pengenal suara macOS tidak lagi didiamkan (sebelumnya pulau hanya menulis
+  "Mendengarkan…"). Sesi dibuka ulang otomatis, beralih ke pengenal online Apple bila pengenal di perangkat
+  gagal, dan bila tetap gagal pulau menampilkan penyebabnya (mis. Dictation mati, izin Speech Recognition).
+- Audio meeting dipasang ulang otomatis bila macOS menghentikannya, mis. saat output pindah ke headset.
+- `rekaman.log`: satu baris per 10 detik berisi level mic dan audio meeting, pergantian perangkat audio, dan
+  error transkrip live.
+
 ## 2.0.9
 
 - Mulai merekam tidak lagi tertahan menunggu izin Screen & System Audio Recording: mic langsung merekam dan timer

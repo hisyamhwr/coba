@@ -8,6 +8,8 @@ import Speech
 final class LiveTranscriber {
     private let recognizer = SFSpeechRecognizer(locale: Locale(identifier: "id-ID"))
     private let onText: (String) -> Void
+    /// Catatan untuk rekaman.log (izin, error pengenal suara).
+    var onLog: ((String) -> Void)?
     private let lock = NSLock()
     private var request: SFSpeechAudioBufferRecognitionRequest?
     private var task: SFSpeechRecognitionTask?
@@ -17,6 +19,10 @@ final class LiveTranscriber {
     private var running = false
     /// Waktu terakhir teks dikirim ke UI (nanodetik), untuk membatasi update ±4x per detik.
     private var lastEmit: UInt64 = 0
+    /// Pengenal di perangkat bisa gagal (model bahasa belum terunduh); setelah itu pakai pengenal online Apple.
+    private var forceServer = false
+    /// Error beruntun tanpa satu hasil pun; berhenti mencoba setelah beberapa kali agar tidak berputar terus.
+    private var failures = 0
     private static let minEmitInterval: UInt64 = 250_000_000
 
     init(onText: @escaping (String) -> Void) {
@@ -27,9 +33,12 @@ final class LiveTranscriber {
         SFSpeechRecognizer.requestAuthorization { [weak self] status in
             guard let self else { return }
             guard status == .authorized else {
-                self.onText("Transkrip live nonaktif: izinkan Speech Recognition di System Settings.")
+                self.onLog?("Transkrip live: izin Speech Recognition tidak diberikan (\(status.rawValue))")
+                self.onText("Transkrip live nonaktif: izinkan Meeting Notes di System Settings → Privacy & "
+                    + "Security → Speech Recognition, lalu buka ulang app.")
                 return
             }
+            self.onLog?("Transkrip live: izin Speech Recognition OK")
             self.lock.lock()
             self.running = true
             self.lock.unlock()
@@ -68,15 +77,18 @@ final class LiveTranscriber {
 
     private func beginRequest() {
         guard let recognizer, recognizer.isAvailable else {
-            onText("Transkrip live tidak tersedia untuk bahasa Indonesia di Mac ini.")
+            onLog?("Transkrip live: pengenal suara id-ID tidak tersedia")
+            onText("Transkrip live tidak tersedia: nyalakan Dictation di System Settings → Keyboard, lalu buka "
+                + "ulang app.")
             return
         }
         let request = SFSpeechAudioBufferRecognitionRequest()
         request.shouldReportPartialResults = true
         request.addsPunctuation = true
-        if recognizer.supportsOnDeviceRecognition {
-            request.requiresOnDeviceRecognition = true
-        }
+        lock.lock()
+        let onDevice = recognizer.supportsOnDeviceRecognition && !forceServer
+        lock.unlock()
+        request.requiresOnDeviceRecognition = onDevice
 
         lock.lock()
         generation += 1
@@ -88,6 +100,30 @@ final class LiveTranscriber {
             guard let self else { return }
             self.lock.lock()
             let isCurrent = myGeneration == self.generation
+            if result != nil { self.failures = 0 }
+            if let error, result == nil, isCurrent, self.running {
+                // Sebelumnya error didiamkan dan sesi tidak dibuka lagi, sehingga pulau hanya menulis
+                // "Mendengarkan…" sampai rotasi berikutnya. Sekarang sesi langsung dibuka ulang.
+                if !self.partial.isEmpty {
+                    self.committed += " " + self.partial
+                    self.partial = ""
+                }
+                // 1110 = tidak ada ucapan (hening sebentar): wajar, tidak dihitung sebagai kegagalan.
+                let nsError = error as NSError
+                if nsError.code != 1110 { self.failures += 1 }
+                let failures = self.failures
+                if onDevice { self.forceServer = true }
+                self.lock.unlock()
+                if nsError.code != 1110 { self.onLog?("Transkrip live error (\(onDevice ? "di perangkat" : "online")): "
+                    + "\(nsError.domain) \(nsError.code) \(error.localizedDescription)") }
+                if failures <= 3 {
+                    self.beginRequest()
+                } else {
+                    self.onText("Transkrip live gagal: \(error.localizedDescription) Pastikan Dictation menyala "
+                        + "(System Settings → Keyboard) dan internet tersambung. Rekaman tetap berjalan.")
+                }
+                return
+            }
             if let result {
                 let text = result.bestTranscription.formattedString
                 if result.isFinal || !isCurrent {
