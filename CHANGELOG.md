@@ -2,6 +2,29 @@
 
 Format versi: `MAYOR.FITUR.PERBAIKAN` (lihat [docs/ROADMAP.md](docs/ROADMAP.md)).
 
+## 2.3.2
+
+Ikon dan animasi lebih hidup, tetap ringan. Sistem desain didokumentasikan di [docs/DESIGN.md](docs/DESIGN.md).
+
+- **Ikon baru:**
+  - logo bola bergradien pink-oranye dengan gelombang suara putih, memantul saat disorot;
+  - tombol Mulai dengan ikon rekam ala kamera;
+  - lencana centang yang "tergambar" lalu beriak saat MoM siap.
+- **Animasi baru:**
+  - equalizer 5 batang bergradien yang mengikuti suaramu;
+  - garis cahaya warna-warni berputar mengelilingi pulau saat Claude memproses;
+  - riak saat menekan **Penting**;
+  - angka bergulir pada penghitung;
+  - ikon berganti dengan efek sistem;
+  - getaran halus trackpad saat mulai, menandai, selesai, dan menyalin.
+- **Lebih mulus dan ringan:**
+  - pegas animasi disetel ulang;
+  - selama rapat tidak ada animasi yang berjalan terus-menerus: equalizer dan cahaya hanya bergerak saat level
+    suara berubah (maks. ±12x per detik);
+  - animasi kontinu hanya saat memproses, dirender lewat GPU;
+  - bayangan pada titik rekam yang berdenyut dihapus.
+- **Aksesibilitas:** semua animasi dekoratif mati bila Reduce motion aktif; tombol ikon punya label VoiceOver.
+
 ## 2.3.1
 
 - **Tampilan pulau lebih mencolok dan bersih**, mengikuti referensi desain:
