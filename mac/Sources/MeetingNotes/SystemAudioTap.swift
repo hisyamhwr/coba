@@ -88,7 +88,7 @@ final class SystemAudioTap {
     private func createTap() throws {
         var excluded = Self.processObjects(bundleIDs: excludedBundleIDs)
         if let own = Self.processObject(pid: getpid()) { excluded.append(own) }
-        let description = CATapDescription(stereoGlobalTapButExcludeProcesses: excluded.map { NSNumber(value: $0) })
+        let description = CATapDescription(stereoGlobalTapButExcludeProcesses: excluded)
         description.uuid = UUID()
         description.muteBehavior = .unmuted
         var newTap = AudioObjectID(kAudioObjectUnknown)

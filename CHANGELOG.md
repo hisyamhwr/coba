@@ -2,6 +2,11 @@
 
 Format versi: `MAYOR.FITUR.PERBAIKAN` (lihat [docs/ROADMAP.md](docs/ROADMAP.md)).
 
+## 3.4.1
+
+- Perbaikan build: daftar proses yang dikecualikan Core Audio tap diberikan sebagai `AudioObjectID`, sesuai SDK
+  macOS terbaru.
+
 ## 3.4.0
 
 Tangkapan audio meeting dan transkrip live tingkat berikutnya. Tetap gratis dan lokal.
