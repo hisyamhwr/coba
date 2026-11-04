@@ -57,7 +57,10 @@ final class AudioCapture: NSObject, SCStreamOutput, SCStreamDelegate {
     private var systemPrebuffer = AudioCapture.screenPrebuffer
     private(set) var systemSourceText = "rekam layar"
     private var systemSilenceReported = false
-    private let engine = AVAudioEngine()
+    /// Bisa diganti mesin baru bila mesin lama gagal menyala (lihat `startMicRecovering`).
+    private var engine = AVAudioEngine()
+    /// Peredam derau benar-benar aktif pada mic yang sedang berjalan (bisa dimatikan otomatis bila gagal).
+    private var micUsesNoiseReduction = false
     private var micConverter: AVAudioConverter?
     private var systemConverter: AVAudioConverter?
     private var systemFormat: AVAudioFormat?
@@ -138,15 +141,67 @@ final class AudioCapture: NSObject, SCStreamOutput, SCStreamDelegate {
         micFile = try Self.makeWriter(folder.appendingPathComponent("mic.wav"))
         systemFile = try Self.makeWriter(folder.appendingPathComponent("sistem.wav"))
         running = true
-        try startMic()
-        // Mic berganti (AirPods tersambung, Zoom mengubah format mic): AVAudioEngine berhenti sendiri dan rekaman
-        // akan hening sampai selesai. Pasang ulang mic agar rekaman tetap jalan.
+        do {
+            try startMicRecovering(preferNoiseReduction: noiseReduction)
+        } catch {
+            running = false
+            throw error
+        }
+        observeEngine()
+        note("Mic mulai: \(micName) (\(micFormatText))\(micUsesNoiseReduction ? ", peredam derau aktif" : "")")
+    }
+
+    /// Mic berganti (AirPods tersambung, Zoom mengubah format mic): AVAudioEngine berhenti sendiri dan rekaman
+    /// akan hening sampai selesai. Pasang ulang mic agar rekaman tetap jalan. Dipanggil ulang bila mesinnya diganti.
+    private func observeEngine() {
+        if let configObserver { NotificationCenter.default.removeObserver(configObserver) }
         configObserver = NotificationCenter.default.addObserver(
             forName: .AVAudioEngineConfigurationChange, object: engine, queue: .main
         ) { [weak self] _ in
             self?.restartMic()
         }
-        note("Mic mulai: \(micName) (\(micFormatText))")
+    }
+
+    /// Nyalakan mic dengan pemulihan. Kesalahan seperti -10875 (unit audio gagal diinisialisasi) bisa muncul bila
+    /// peredam derau (Voice Processing) tidak didukung kombinasi perangkat, atau mic sedang berganti/dipakai
+    /// aplikasi lain. Urutan: coba biasa → tanpa peredam derau dengan mesin audio baru → sekali lagi setelah jeda.
+    private func startMicRecovering(preferNoiseReduction: Bool) throws {
+        do {
+            try startMic(noiseReduction: preferNoiseReduction)
+            return
+        } catch {
+            note("Mic gagal menyala: \(Self.errorText(error)); mencoba lagi")
+            if preferNoiseReduction {
+                onProblem?("Peredam derau mic tidak didukung perangkat ini; dimatikan otomatis untuk rekaman ini.")
+            }
+        }
+        var lastError: Error = CaptureError.noMicrophone
+        for attempt in 1...2 {
+            resetEngine()
+            if attempt == 2 { Thread.sleep(forTimeInterval: 0.4) }
+            do {
+                try startMic(noiseReduction: false)
+                note("Mic menyala pada percobaan ulang ke-\(attempt) (mesin audio baru, tanpa peredam derau)")
+                return
+            } catch {
+                lastError = error
+                note("Percobaan ulang ke-\(attempt) gagal: \(Self.errorText(error))")
+            }
+        }
+        throw lastError
+    }
+
+    /// Buang mesin audio lama (bisa tersangkut setelah gagal) dan buat yang baru.
+    private func resetEngine() {
+        engine.inputNode.removeTap(onBus: 0)
+        engine.stop()
+        engine = AVAudioEngine()
+        micUsesNoiseReduction = false
+    }
+
+    private static func errorText(_ error: Error) -> String {
+        let nsError = error as NSError
+        return "\(nsError.localizedDescription) [\(nsError.domain) \(nsError.code)]"
     }
 
     /// Mulai merekam audio Zoom/Meet/Teams. Mengembalikan peringatan jika tidak bisa.
@@ -296,10 +351,11 @@ final class AudioCapture: NSObject, SCStreamOutput, SCStreamDelegate {
 
     // MARK: - Mikrofon (jam utama)
 
-    private func startMic() throws {
+    private func startMic(noiseReduction: Bool) throws {
         micName = AVCaptureDevice.default(for: .audio)?.localizedName ?? "mikrofon"
         let input = engine.inputNode
         if noiseReduction { enableNoiseReduction(input) }
+        micUsesNoiseReduction = input.isVoiceProcessingEnabled
         let inputFormat = input.outputFormat(forBus: 0)
         guard inputFormat.sampleRate > 0, inputFormat.channelCount > 0 else { throw CaptureError.noMicrophone }
         micFormatText = "\(Int(inputFormat.sampleRate)) Hz, \(inputFormat.channelCount) kanal"
@@ -358,7 +414,8 @@ final class AudioCapture: NSObject, SCStreamOutput, SCStreamDelegate {
         engine.stop()
         micRestarts += 1
         do {
-            try startMic()
+            try startMicRecovering(preferNoiseReduction: micUsesNoiseReduction)
+            observeEngine()
             note("Perangkat audio berganti; mic dipasang ulang: \(micName) (\(micFormatText))")
         } catch {
             note("Mic gagal dipasang ulang: \(error.localizedDescription)")

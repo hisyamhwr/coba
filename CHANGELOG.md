@@ -2,6 +2,15 @@
 
 Format versi: `MAYOR.FITUR.PERBAIKAN` (lihat [docs/ROADMAP.md](docs/ROADMAP.md)).
 
+## 3.4.2
+
+- Perbaikan: "Gagal mulai merekam ... -10875" (unit audio mic gagal diinisialisasi). Mic kini dinyalakan dengan
+  pemulihan otomatis: bila gagal, peredam derau dimatikan untuk rekaman itu (dengan pemberitahuan di pulau) dan
+  dicoba lagi dengan mesin audio baru, lalu sekali lagi setelah jeda singkat. Semua percobaan dicatat di
+  `rekaman.log`. Pemulihan yang sama dipakai saat mic dipasang ulang di tengah rapat.
+- Bila rekaman gagal dimulai, kartu menampilkan "Gagal mulai merekam" dengan tombol **Coba lagi** (sebelumnya
+  "Proses ulang", padahal belum ada rekaman yang bisa diproses).
+
 ## 3.4.1
 
 - Perbaikan build: daftar proses yang dikecualikan Core Audio tap diberikan sebagai `AudioObjectID`, sesuai SDK

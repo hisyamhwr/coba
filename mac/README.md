@@ -66,6 +66,7 @@ System Settings → General → Login Items → **+** → pilih `mac/build/Meeti
 | Rekaman hening / "Tidak ada suara yang terdeteksi" / pulau menulis "Mic hanya memberi hening" | `killall MeetingNotes; ./mac/build.sh --reset-izin`, buka app, izinkan Microphone & Speech Recognition, nyalakan Meeting Notes di Screen & System Audio Recording, buka ulang app. Lihat `rekaman.log` di folder rekaman (puncak 0 = hening total) |
 | Memproses terlalu lama / macet | Klik ✕ di pulau untuk membatalkan (rekaman aman), lalu **Proses ulang** |
 | Chip 👥 **Peserta** tidak pernah menyala / "Suara peserta belum terdengar sama sekali" | Izinkan Meeting Notes di **System Audio Recording Only** (lihat Izin). Bila tetap hening: menu bar → matikan **Audio meeting via Core Audio** (kembali ke rekam layar), lalu mulai rekam lagi. Cek baris `Audio sistem` di `rekaman.log` |
+| "Gagal mulai merekam" / "Mic gagal menyala" (mis. kode -10875) | Klik **Coba lagi**. Bila berulang: matikan **Peredam derau mic** di menu bar, tutup aplikasi lain yang mengunci mic, cek System Settings → Sound → Input. Detail percobaan ada di `rekaman.log` |
 | Ruangan bising / suara mic kurang jelas | Menu bar → **Peredam derau mic** (berlaku untuk rekaman berikutnya) |
 | Transkrip live: kata abu-abu lalu berubah putih | Normal: abu-abu = tebakan cepat pengenal Apple, putih = sudah dikoreksi Whisper (±5–15 detik kemudian, memakai kamus istilah) |
 | Kartu "MoM belum tersusun" (mis. batas pemakaian Claude) | Klik **Susun ulang**: transkrip yang tersimpan dipakai, tanpa mentranskripsi ulang |

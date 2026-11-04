@@ -43,6 +43,8 @@ final class AppState: ObservableObject {
     @Published var stepDetail = ""
     @Published var result: NotesResult?
     @Published var errorMessage = ""
+    /// Kegagalan terjadi sebelum rekaman dimulai (tidak ada yang bisa diproses ulang).
+    @Published var failedToStart = false
     /// Centang "Buat juga Word (.docx)"; diingat antar sesi.
     @Published var exportDocx = UserDefaults.standard.bool(forKey: "exportDocx") {
         didSet { UserDefaults.standard.set(exportDocx, forKey: "exportDocx") }

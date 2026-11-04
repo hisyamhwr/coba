@@ -513,7 +513,7 @@ struct IslandView: View {
             HStack(spacing: 6) {
                 Image(systemName: "exclamationmark.triangle.fill")
                     .symbolEffect(.bounce, value: state.errorMessage)
-                Text("Gagal memproses")
+                Text(state.failedToStart ? "Gagal mulai merekam" : "Gagal memproses")
                 Spacer()
                 iconButton("xmark", help: "Tutup") { controller.dismiss() }
             }
@@ -527,7 +527,12 @@ struct IslandView: View {
             HStack(spacing: 8) {
                 Spacer()
                 iconButton("folder", help: "Buka folder rekaman") { controller.openFolder() }
-                if state.recordingDir != nil {
+                if state.failedToStart {
+                    primaryButton("Coba lagi", icon: "record.circle", gradient: Palette.action) {
+                        haptic()
+                        controller.start()
+                    }
+                } else if state.recordingDir != nil {
                     primaryButton("Proses ulang", icon: "arrow.clockwise", gradient: Palette.action) {
                         controller.retry()
                     }

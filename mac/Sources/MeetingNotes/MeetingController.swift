@@ -72,7 +72,8 @@ final class MeetingController {
             guard await AudioCapture.requestMicAccess() else {
                 capture.note("Izin mikrofon ditolak")
                 self.state.starting = false
-                self.fail("Izin mikrofon ditolak. Buka System Settings → Privacy & Security → Microphone.", dir: dir)
+                self.fail("Izin mikrofon ditolak. Buka System Settings → Privacy & Security → Microphone.", dir: dir,
+                          startFailure: true)
                 return
             }
             do {
@@ -80,7 +81,9 @@ final class MeetingController {
             } catch {
                 capture.note("Gagal mulai: \(error.localizedDescription)")
                 self.state.starting = false
-                self.fail("Gagal mulai merekam: \(error.localizedDescription)", dir: dir)
+                self.fail("Mic gagal menyala: \(error.localizedDescription) Tutup aplikasi lain yang memakai mic "
+                    + "secara eksklusif, cek System Settings → Sound → Input, lalu klik Coba lagi.", dir: dir,
+                          startFailure: true)
                 return
             }
             self.state.starting = false
@@ -184,7 +187,8 @@ final class MeetingController {
     /// Proses ulang rekaman terakhir: setelah gagal, atau saat MoM gagal disusun (mis. batas pemakaian Claude).
     /// Transkrip yang sudah jadi dipakai ulang, jadi langsung ke penyusunan MoM.
     func retry() {
-        let canRetry = state.phase == .failed || (state.phase == .done && state.result?.summarized == false)
+        let canRetry = (state.phase == .failed && !state.failedToStart)
+            || (state.phase == .done && state.result?.summarized == false)
         guard canRetry, let dir = state.recordingDir,
               FileManager.default.fileExists(atPath: dir.appendingPathComponent("meeting.wav").path)
         else { return }
@@ -303,11 +307,13 @@ final class MeetingController {
         }
     }
 
-    private func fail(_ message: String, dir: URL?) {
+    /// startFailure: rekaman belum sempat dimulai (izin/mic gagal), jadi tombolnya "Coba lagi", bukan "Proses ulang".
+    private func fail(_ message: String, dir: URL?, startFailure: Bool = false) {
         timer?.invalidate()
         timer = nil
         state.errorMessage = message
         state.recordingDir = dir
+        state.failedToStart = startFailure
         state.phase = .failed
     }
 
