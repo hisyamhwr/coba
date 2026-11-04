@@ -108,7 +108,7 @@ final class AudioCapture: NSObject, SCStreamOutput, SCStreamDelegate {
     private let systemQueue = DispatchQueue(label: "meetingnotes.system-audio")
     private let writeQueue = DispatchQueue(label: "meetingnotes.writer")
 
-    init(output: URL, coreAudioTap: Bool = true, noiseReduction: Bool = false) {
+    init(output: URL, coreAudioTap: Bool = false, noiseReduction: Bool = false) {
         self.output = output
         self.useCoreAudioTap = coreAudioTap
         self.noiseReduction = noiseReduction
@@ -529,7 +529,7 @@ final class AudioCapture: NSObject, SCStreamOutput, SCStreamDelegate {
                 systemSilenceReported = true
                 note("Audio meeting hening total selama 2 menit (\(systemSourceText))")
                 onProblem?("Suara peserta belum terdengar sama sekali. Bila meeting sedang bersuara, buka menu bar → "
-                    + "matikan \"Audio meeting via Core Audio\", lalu mulai rekam lagi.")
+                    + "pastikan \"Audio meeting via Core Audio\" tidak dicentang, lalu mulai rekam lagi.")
             }
         }
 

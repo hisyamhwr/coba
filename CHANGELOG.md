@@ -2,6 +2,13 @@
 
 Format versi: `MAYOR.FITUR.PERBAIKAN` (lihat [docs/ROADMAP.md](docs/ROADMAP.md)).
 
+## 3.4.4
+
+- **Audio meeting kembali lewat rekam layar secara bawaan** (cara yang sudah terbukti di Mac pengguna). Core
+  Audio tap dari 3.4.0 menjadi pilihan **eksperimental** di menu bar dan mati secara bawaan; pilihan "menyala"
+  dari 3.4.x tidak terbawa. Penyebab: di 3.4.x tap langsung dijadikan bawaan sebelum terbukti di Mac pengguna,
+  dan suara meeting tidak terekam pada rapat sungguhan.
+
 ## 3.4.3
 
 - Perbaikan: suara meeting tidak terekam. Core Audio tap tetap "berhasil" walau izin System Audio Recording

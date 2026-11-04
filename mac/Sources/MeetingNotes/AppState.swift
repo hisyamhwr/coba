@@ -54,9 +54,11 @@ final class AppState: ObservableObject {
         didSet { UserDefaults.standard.set(liveTranscript, forKey: "liveTranscript") }
     }
 
-    /// Audio meeting lewat Core Audio tap (macOS 14.2+); dimatikan = lewat rekam layar seperti versi lama.
-    @Published var coreAudioTap = UserDefaults.standard.object(forKey: "coreAudioTap") as? Bool ?? true {
-        didSet { UserDefaults.standard.set(coreAudioTap, forKey: "coreAudioTap") }
+    /// Audio meeting lewat Core Audio tap (macOS 14.2+), EKSPERIMENTAL dan mati secara bawaan sampai terbukti di
+    /// Mac pengguna. Bawaan = rekam layar (ScreenCaptureKit), cara yang sudah terbukti. Kunci baru agar pilihan
+    /// lama (menyala) dari 3.4.x tidak terbawa.
+    @Published var coreAudioTap = UserDefaults.standard.bool(forKey: "coreAudioTapExperimental") {
+        didSet { UserDefaults.standard.set(coreAudioTap, forKey: "coreAudioTapExperimental") }
     }
     /// Peredam derau mic bawaan macOS; berguna di ruangan bising.
     @Published var micNoiseReduction = UserDefaults.standard.bool(forKey: "micNoiseReduction") {

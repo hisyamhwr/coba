@@ -30,7 +30,7 @@ Target: aplikasi pencatat rapat ala Fireflies yang berjalan langsung di Mac, tan
 | 3.1.0 | Tangkapan suara & transkrip live lebih baik (penguat otomatis per jalur, filter dengung, musik dikecualikan, koreksi salah dengar yang dipelajari), pulau lebih ringan dengan chip jalur suara | ✅ Kode selesai, menunggu QA di Mac |
 | 3.2.0 | Bentuk pulau ala notch app modern: island dengan bahu melengkung (tanpa sudut siku) atau pill melayang, dipilih di menu bar | ✅ Kode selesai, menunggu QA di Mac |
 | 3.3.0 | Desain ulang panel Siap & Merekam: tombol Mulai ringkas, sapaan, chip Word/Live, kartu kaca, efek riak/kilau/masuk bertahap | ✅ Kode selesai, menunggu QA di Mac |
-| 3.4.0 | Audio meeting lewat Core Audio tap, peredam derau mic, transkrip live dua lapis (Apple instan → koreksi Whisper) | ✅ Kode selesai, menunggu QA di Mac |
+| 3.4.0 | Core Audio tap (eksperimental sejak 3.4.4, bawaan kembali rekam layar), peredam derau mic, transkrip live dua lapis (Apple instan → koreksi Whisper) | ⚠️ Tap gagal di rapat sungguhan; QA ulang |
 | 3.5.0 | **Ringan untuk Mac 8 GB**: model Whisper hemat memori, penjaga tekanan memori (koreksi live melambat, rekaman tidak pernah terganggu), pemakaian RAM/CPU dicatat di log | Rencana |
 | 3.6.0 | **Audio meeting lebih bagus**: verifikasi Core Audio tap di Mac pengguna, opsi hanya aplikasi meeting, deteksi suara peserta terlalu pelan/pecah, sinkron mic–meeting untuk rapat panjang | Rencana |
 | 3.7.0 | **Transkrip live menyerupai ucapan**: akurasi diukur otomatis (live vs final), jeda koreksi Whisper lebih pendek, kamus tim lebih kuat, teks tidak melompat saat dikoreksi | Rencana |
@@ -53,3 +53,5 @@ MacBook Pro 13" M1 (2020), RAM 8 GB, macOS Tahoe 26. Rapat 1–4 jam, bahasa cam
   di log, sehingga setiap optimasi terbukti dengan angka.
 - **macOS 26**: API terbaru boleh dipakai (Core Audio tap, SpeechAnalyzer) dengan cadangan yang aman.
 - **Tanpa regresi**: setiap perbaikan disertai tes otomatis; QA rapat ≥ 1 jam sebelum versi dianggap stabil.
+- **Perubahan perekaman tidak pernah langsung jadi bawaan**: cara rekam baru masuk sebagai pilihan
+  eksperimental dan baru dijadikan bawaan setelah terbukti merekam di Mac pengguna.

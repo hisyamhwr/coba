@@ -76,7 +76,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         menu.addItem(.separator())
         menu.addItem(NSMenuItem(title: "Buat juga Word (.docx)", action: #selector(toggleDocx), keyEquivalent: ""))
         menu.addItem(NSMenuItem(title: "Transkrip live", action: #selector(toggleLive), keyEquivalent: ""))
-        menu.addItem(NSMenuItem(title: "Audio meeting via Core Audio", action: #selector(toggleTap), keyEquivalent: ""))
+        menu.addItem(NSMenuItem(title: "Audio meeting via Core Audio (eksperimental)", action: #selector(toggleTap), keyEquivalent: ""))
         menu.addItem(NSMenuItem(title: "Peredam derau mic", action: #selector(toggleNoise), keyEquivalent: ""))
         menu.addItem(.separator())
         menu.addItem(NSMenuItem(title: "Bentuk: Island (menyatu dengan notch)", action: #selector(useIsland),
