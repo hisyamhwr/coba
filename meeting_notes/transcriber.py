@@ -366,6 +366,32 @@ class _FasterWhisperEngine:
         return [Segment(s.start, s.end, s.text.strip()) for s in segments]
 
 
+# Cache GPU MLX dibatasi: tanpa batas, buffer yang pernah dipakai disimpan terus dan pemakaian memori proses
+# merayap naik selama rapat panjang (berat di Mac 8 GB). Model tetap di memori; hanya cache sementara dibatasi.
+MLX_CACHE_LIMIT_BYTES = 256 * 1024 * 1024
+_mlx_cache_limited = False
+
+
+def _limit_mlx_cache() -> None:
+    global _mlx_cache_limited
+    if _mlx_cache_limited:
+        return
+    _mlx_cache_limited = True
+    try:
+        import mlx.core as mx
+    except ImportError:
+        return
+    # Nama fungsinya berpindah antar-versi MLX (mx.metal.set_cache_limit -> mx.set_cache_limit).
+    for setter in (getattr(mx, "set_cache_limit", None), getattr(getattr(mx, "metal", None), "set_cache_limit", None)):
+        if setter is None:
+            continue
+        try:
+            setter(MLX_CACHE_LIMIT_BYTES)
+            return
+        except Exception:  # noqa: BLE001, S112 - versi MLX lain: coba nama berikutnya
+            continue
+
+
 class _MlxEngine:
     def __init__(self, model_size: str, language: str | None):
         self.repo = MLX_REPOS.get(model_size, model_size)
@@ -378,6 +404,8 @@ class _MlxEngine:
 
     def transcribe(self, audio: np.ndarray, prompt: str) -> list[Segment]:
         import mlx_whisper
+
+        _limit_mlx_cache()
 
         result = mlx_whisper.transcribe(
             audio, path_or_hf_repo=self.repo, language=self.language, initial_prompt=prompt,

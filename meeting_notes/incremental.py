@@ -1,8 +1,9 @@
 """Transkripsi di latar belakang selama rapat berjalan, sekaligus koreksi transkrip live.
 
 Aplikasi Mac menjalankan `python -m meeting_notes ikuti <folder rekaman>` saat mulai merekam. Proses ini membaca
-`sistem.wav` dan `mic.wav` yang terus bertambah dan mentranskripsi potongan pendek (+-6-12 detik, dipotong di
-jeda bicara) bergantian per jalur. Setiap potongan:
+`sistem.wav` dan `mic.wav` yang terus bertambah dan mentranskripsi per ucapan: begitu ada jeda bicara +-0,4 detik
+(atau paling lama 10 detik bicara tanpa jeda), potongan itu langsung ditranskripsi, bergantian per jalur. Bagian
+yang hanya berisi derau (mis. mic saat kamu mendengarkan) dilewati tanpa memanggil Whisper. Setiap potongan:
 - disimpan ke `transkrip_parsial.json`, sehingga saat rapat selesai `proses` hanya perlu mentranskripsi
   beberapa detik terakhir, berapa pun panjang rapatnya;
 - dikirim ke aplikasi sebagai baris `LIVE` (lihat `follow`), yang mengganti kata-kata kasar dari pengenal
@@ -18,28 +19,38 @@ import time
 from collections.abc import Callable
 from pathlib import Path
 
+import numpy as np
+
 from .transcriber import (
     FAST_MODEL,
     SAMPLE_RATE,
     Segment,
     Transcriber,
-    iter_chunks,
     merge_tracks,
 )
 from .wavio import GrowingWav
 
 STATE_FILE = "transkrip_parsial.json"
 TRACKS = {"sistem": "sistem.wav", "mic": "mic.wav"}
-# Potongan pendek agar koreksi live muncul beberapa detik setelah diucapkan: dipotong di titik paling sunyi
-# antara detik ke-6 dan ke-12. Setiap potongan diberi akhir kalimat potongan sebelumnya sebagai konteks.
-LIVE_CHUNK_SECONDS = 12
-LIVE_CUT_SEARCH_SECONDS = 6
+# Potongan per ucapan agar koreksi live muncul 1-3 detik setelah kalimat selesai. Setiap potongan diberi akhir
+# kalimat potongan sebelumnya sebagai konteks.
+LIVE_MIN_SECONDS = 1.5      # potongan terpendek (ucapan sangat pendek digabung dengan jeda sesudahnya)
+LIVE_MAX_SECONDS = 10.0     # bicara tanpa jeda dipotong di titik paling sunyi paling lambat di sini
+LIVE_PAUSE_SECONDS = 0.4    # jeda yang menandai akhir ucapan
+LIVE_FRAME = SAMPLE_RATE // 20   # 50 ms
+# Di atas derau ruangan x NOISE_MARGIN dianggap suara. Batas bawah sama dengan ambang minimum speech_spans,
+# jadi bagian yang dilewati di sini juga tidak akan dianggap suara oleh transkripsi akhir.
+NOISE_MARGIN = 2.5
+SILENCE_LEVEL = 1.5e-3
+# Pengaman: level di atas ini (-40 dBFS) selalu dianggap suara, walau perkiraan derau keliru tinggi (mis. rekaman
+# dimulai saat orang sedang bicara tanpa jeda). Ucapan tidak pernah dilewati sebagai derau.
+SPEECH_ALWAYS = 0.01
 # Bila transkripsi butuh lebih dari 40% durasi audio (dua jalur bergantian), Mac terlalu sibuk selama rapat
 # (Zoom/Teams bisa tersendat) dan berisiko tidak mengejar: turun ke model turbo yang +-3x lebih cepat.
 MAX_REALTIME_FACTOR = 0.4
 # Jeda setelah error (mis. model gagal diunduh) sebelum mencoba lagi; proses akhir tetap mengerjakan sisanya.
 ERROR_BACKOFF_SECONDS = 30
-POLL_SECONDS = 1.0
+POLL_SECONDS = 0.5
 
 
 def load_state(folder: Path) -> dict:
@@ -64,30 +75,98 @@ def track_segments(state: dict, name: str) -> tuple[float, list[Segment]]:
     return float(track.get("until", 0.0)), segments
 
 
+def frame_levels(audio: np.ndarray, frame: int = LIVE_FRAME) -> np.ndarray:
+    n = len(audio) // frame
+    if n == 0:
+        return np.zeros(0, dtype=np.float32)
+    return np.sqrt((audio[: n * frame].reshape(-1, frame) ** 2).mean(axis=1))
+
+
+def update_floor(floor: float, levels: np.ndarray) -> float:
+    """Perkiraan derau ruangan jalur ini (persentil 10 level per 50 ms, dirata-rata antar-jendela).
+
+    Bila jendela penuh bicara (persentil 10 jauh di atas derau), perkiraan hanya naik sangat pelan.
+    """
+    if levels.size == 0:
+        return floor
+    low = float(np.percentile(levels, 10))
+    if floor <= 0:
+        return low
+    weight = 0.2 if low < floor * 4 else 0.02
+    return (1 - weight) * floor + weight * low
+
+
+def plan_cut(window: np.ndarray, floor: float, complete: bool) -> tuple[int, bool] | None:
+    """Potongan live berikutnya dari awal `window`: (panjang dalam sampel, berisi suara?), atau None (tunggu).
+
+    - Ada jeda >= LIVE_PAUSE_SECONDS setelah suara: dipotong di tengah jeda (ucapan selesai).
+    - Tidak ada suara: dilewati tanpa transkripsi, sisakan ekor pendek bila suara baru akan mulai.
+    - Hening panjang di depan lalu suara: heningnya dilewati dulu.
+    - Bicara terus tanpa jeda: tunggu, sampai `complete` (jendela sudah selebar maksimum) lalu dipotong di
+      titik paling sunyi.
+    """
+    levels = frame_levels(window)
+    n = levels.size
+    per_second = SAMPLE_RATE // LIVE_FRAME
+    min_frames = int(LIVE_MIN_SECONDS * per_second)
+    pause = int(LIVE_PAUSE_SECONDS * per_second)
+    if n < min_frames:
+        return None
+    loud = levels >= max(SILENCE_LEVEL, min(floor * NOISE_MARGIN, SPEECH_ALWAYS))
+    if not loud.any():
+        return ((n - pause) * LIVE_FRAME, False) if n - pause >= min_frames else None
+    first = int(np.argmax(loud))
+    if first >= min_frames:
+        return ((first - pause // 2) * LIVE_FRAME, False)
+    run_start = -1
+    for i in range(first, n):
+        if loud[i]:
+            run_start = -1
+            continue
+        if run_start < 0:
+            run_start = i
+        if i - run_start + 1 >= pause and i >= min_frames:
+            return (max(run_start + pause // 2, min_frames) * LIVE_FRAME, True)
+    if not complete:
+        return None
+    max_frames = min(n, int(LIVE_MAX_SECONDS * per_second))
+    quietest = min_frames + int(np.argmin(levels[min_frames:max_frames]))
+    return (quietest * LIVE_FRAME, True)
+
+
 def advance(folder: Path, state: dict, transcriber: Transcriber, name: str, reader: GrowingWav,
             max_chunks: int | None = None) -> float:
-    """Transkripsi potongan lengkap yang belum dikerjakan (paling banyak max_chunks).
+    """Kerjakan audio baru jalur ini per ucapan (paling banyak max_chunks potongan bersuara).
 
-    Mengembalikan detik audio yang ditranskripsi.
+    Mengembalikan detik audio yang maju (ditranskripsi atau dilewati karena hanya derau).
     """
     until, segments = track_segments(state, name)
-    context = str((state.get(name) or {}).get("context", ""))
-    start = int(until * SAMPLE_RATE)
-    if reader.samples() - start < (LIVE_CHUNK_SECONDS + 1) * SAMPLE_RATE:
-        return 0.0
-    done = 0.0
-    # Potongan terakhir belum lengkap (rapat masih berjalan): dikerjakan pada putaran berikutnya.
-    chunks = iter_chunks(reader, start, LIVE_CHUNK_SECONDS, include_last=False, search_seconds=LIVE_CUT_SEARCH_SECONDS)
-    for count, (pos, chunk) in enumerate(chunks, start=1):
-        segments += transcriber.transcribe_chunk(chunk, pos / SAMPLE_RATE, context=context)
-        context = getattr(transcriber, "last_context", "")
-        until = (pos + len(chunk)) / SAMPLE_RATE
-        done += len(chunk) / SAMPLE_RATE
-        state[name] = {"until": until, "segments": [[s.start, s.end, s.text] for s in segments], "context": context}
+    track = state.get(name) or {}
+    context = str(track.get("context", ""))
+    floor = float(track.get("floor", 0.0))
+    done, spoken = 0.0, 0
+    window_samples = int((LIVE_MAX_SECONDS + LIVE_PAUSE_SECONDS) * SAMPLE_RATE)
+    while max_chunks is None or spoken < max_chunks:
+        start = round(until * SAMPLE_RATE)
+        end = min(reader.samples(), start + window_samples)
+        if end - start < int(LIVE_MIN_SECONDS * SAMPLE_RATE):
+            break
+        window = reader.read(start, end)
+        floor = update_floor(floor, frame_levels(window))
+        plan = plan_cut(window, floor, complete=len(window) >= window_samples)
+        if plan is None:
+            break
+        cut, has_speech = plan
+        if has_speech:
+            segments += transcriber.transcribe_chunk(window[:cut], start / SAMPLE_RATE, context=context)
+            context = getattr(transcriber, "last_context", "")
+            spoken += 1
+        until = (start + cut) / SAMPLE_RATE
+        done += cut / SAMPLE_RATE
+        state[name] = {"until": until, "segments": [[s.start, s.end, s.text] for s in segments],
+                       "context": context, "floor": floor}
         state["model"] = transcriber.model_size
         save_state(folder, state)
-        if max_chunks is not None and count >= max_chunks:
-            break
     return done
 
 

@@ -632,11 +632,11 @@ def test_background_transcription_then_process_only_transcribes_the_rest(tmp_pat
     state = incremental.load_state(tmp_path)
     for name, file in incremental.TRACKS.items():
         incremental.advance(tmp_path, state, background, name, incremental.GrowingWav(tmp_path / file))
-    # Potongan pendek (6-12 detik); potongan terakhir (belum tentu lengkap saat rapat berjalan) ditunda.
+    # Bicara tanpa jeda: dipotong paling lambat tiap 10 detik; potongan terakhir (rapat masih berjalan) ditunda.
     saved = incremental.load_state(tmp_path)
-    assert 7 * 60 - 13 < saved["sistem"]["until"] < 7 * 60
+    assert 7 * 60 - 11 < saved["sistem"]["until"] < 7 * 60
     assert len(background.chunks) == 2 * len(saved["sistem"]["segments"])
-    assert all(6 <= seconds <= 12.1 for _, seconds in background.chunks)
+    assert all(1.5 <= seconds <= 10.01 for _, seconds in background.chunks)
     # Setiap potongan menerima akhir kalimat potongan sebelumnya di jalur yang sama.
     assert background.contexts[1] == "akhir 0" and saved["sistem"]["context"].startswith("akhir")
 
@@ -645,7 +645,7 @@ def test_background_transcription_then_process_only_transcribes_the_rest(tmp_pat
                                INFO.started_at, lambda _: None, final)
     # Saat rapat selesai hanya sisa audio yang ditranskripsi, satu kali per jalur.
     assert [round(offset) for offset, _ in final.chunks] == [round(saved["sistem"]["until"])] * 2
-    assert all(seconds < 13 for _, seconds in final.chunks)
+    assert all(seconds < 11 for _, seconds in final.chunks)
     md = result.markdown_path.read_text(encoding="utf-8")
     assert "potongan di 0" in md and f"potongan di {saved['sistem']['until']:.0f}" in md
 
@@ -813,3 +813,77 @@ def test_follow_emits_live_lines(tmp_path):
                        on_live=lambda until, segs: updates.append((until, [s.text for s in segs])))
     assert updates and updates[0][1] == ["potongan di 0"]
     assert all(a[0] < b[0] for a, b in itertools.pairwise(updates))
+
+
+def _noise(seconds, level=0.004, seed=0):
+    return (np.random.default_rng(seed).standard_normal(int(16000 * seconds)) * level).astype("float32")
+
+
+def test_plan_cut_ends_utterance_at_pause():
+    from meeting_notes.incremental import plan_cut
+
+    window = np.concatenate([_speech(3), _noise(1.2)])
+    cut, has_speech = plan_cut(window, floor=0.004, complete=False)
+    # Dipotong di tengah jeda pertama setelah ucapan (bukan menunggu 10 detik).
+    assert has_speech and 3.0 < cut / 16000 < 3.4
+
+
+def test_plan_cut_skips_noise_and_leading_silence():
+    from meeting_notes.incremental import plan_cut
+
+    cut, has_speech = plan_cut(_noise(10.4), floor=0.004, complete=True)
+    assert not has_speech and cut / 16000 == pytest.approx(10.0, abs=0.06)
+    cut, has_speech = plan_cut(np.concatenate([_noise(4), _speech(3)]), floor=0.004, complete=False)
+    # Hening di depan dilewati dulu; ucapan dikerjakan pada giliran berikutnya dari awal ucapan.
+    assert not has_speech and 3.7 < cut / 16000 < 4.0
+
+
+def test_plan_cut_waits_for_unfinished_speech_then_caps_at_ten_seconds():
+    from meeting_notes.incremental import plan_cut
+
+    assert plan_cut(_speech(6), floor=0.004, complete=False) is None
+    cut, has_speech = plan_cut(_speech(10.4), floor=0.004, complete=True)
+    assert has_speech and 1.5 <= cut / 16000 <= 10.0
+
+
+def test_plan_cut_short_reply_kept_whole():
+    from meeting_notes.incremental import plan_cut
+
+    cut, has_speech = plan_cut(np.concatenate([_speech(0.8), _noise(3)]), floor=0.004, complete=False)
+    # "Oke siap" (0,8 detik) tetap ditranskripsi, digabung dengan jeda sesudahnya sampai 1,5 detik.
+    assert has_speech and cut / 16000 == pytest.approx(1.5, abs=0.06)
+
+
+def test_noise_floor_tracks_room_noise_not_speech():
+    from meeting_notes.incremental import frame_levels, update_floor
+
+    floor = update_floor(0.0, frame_levels(_noise(5)))
+    assert 0.002 < floor < 0.005
+    for _ in range(10):
+        floor = update_floor(floor, frame_levels(_speech(10)))
+    assert floor < 0.02
+
+
+def test_plan_cut_never_skips_loud_speech_even_with_wrong_noise_floor():
+    from meeting_notes.incremental import plan_cut
+
+    # Perkiraan derau keliru setinggi suara (rekaman dimulai di tengah orang bicara).
+    _, has_speech = plan_cut(_speech(10.4), floor=0.07, complete=True)
+    assert has_speech
+
+
+def test_live_correction_latency_simulation():
+    """Regresi: koreksi Whisper tampil +-1-3 detik setelah ucapan selesai (sebelum 3.4.5: +-9 detik)."""
+    import importlib.util
+    from pathlib import Path
+
+    root = Path(__file__).resolve().parents[1]
+    spec = importlib.util.spec_from_file_location("simulasi_live", root / "tools" / "simulasi_live.py")
+    sim = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(sim)
+    module = sim.load(root / "meeting_notes" / "incremental.py", "meeting_notes._sim_test")
+    tracks, utterances = sim.make_tracks(5)
+    latency, total, _, left = sim.run(module, tracks, utterances, 5)
+    assert len(latency) == total
+    assert np.median(latency) < 3.0 and np.percentile(latency, 90) < 5.0
+    assert left < 5

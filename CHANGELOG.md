@@ -2,6 +2,30 @@
 
 Format versi: `MAYOR.FITUR.PERBAIKAN` (lihat [docs/ROADMAP.md](docs/ROADMAP.md)).
 
+## 3.4.5
+
+Optimasi transkrip live (koreksi Whisper), diuji dengan simulasi rapat (`tools/simulasi_live.py`):
+
+| Skenario | 3.4.4: jeda median / p90 | 3.4.5: jeda median / p90 | Panggilan Whisper |
+|---|---|---|---|
+| Rapat 20 menit, M1 + turbo | 8,8 s / 12,0 s | **1,4 s / 1,7 s** | 248 → 216 |
+| Mac lebih lambat (biaya 3x) | 11,0 s / 14,2 s | **2,8 s / 4,4 s** | 248 → 215 |
+| Rapat 70 menit | 8,9 s / 12,0 s | **1,4 s / 3,3 s** | 902 → 747 |
+
+(jeda = detik dari akhir ucapan sampai teks hasil Whisper tampil; semua ucapan tampil di setiap skenario)
+
+- **Per ucapan, bukan per 6–12 detik**: worker mendeteksi akhir ucapan (jeda bicara ±0,4 detik) dan langsung
+  mentranskripsinya; bicara tanpa jeda dipotong paling lambat tiap 10 detik di titik paling sunyi.
+- **Derau dilewati**: bagian yang hanya berisi derau ruangan (mis. mic saat kamu mendengarkan) dilewati tanpa
+  memanggil Whisper, memakai perkiraan derau per jalur. Pengaman: level di atas −40 dBFS selalu dianggap suara,
+  jadi ucapan tidak pernah terbuang walau perkiraan derau keliru.
+- Worker memeriksa audio baru tiap 0,5 detik (biaya saat menunggu ±0,1% CPU).
+- **Hemat memori di Mac 8 GB**: cache GPU MLX dibatasi 256 MB agar pemakaian memori tidak merayap naik selama
+  rapat panjang.
+- Setelah rapat, sisa yang perlu ditranskripsi tinggal ±1–2 detik per jalur.
+- Tes regresi baru: jeda koreksi live (median < 3 s), pemotongan per ucapan, derau, ucapan pendek, dan pengaman
+  ucapan keras. 64 tes lulus.
+
 ## 3.4.4
 
 - **Audio meeting kembali lewat rekam layar secara bawaan** (cara yang sudah terbukti di Mac pengguna). Core
