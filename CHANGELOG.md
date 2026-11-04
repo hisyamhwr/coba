@@ -2,6 +2,14 @@
 
 Format versi: `MAYOR.FITUR.PERBAIKAN` (lihat [docs/ROADMAP.md](docs/ROADMAP.md)).
 
+## 3.4.3
+
+- Perbaikan: suara meeting tidak terekam. Core Audio tap tetap "berhasil" walau izin System Audio Recording
+  belum diberikan, tetapi macOS hanya memberinya hening, sehingga aplikasi tidak beralih ke rekam layar.
+  Sekarang rekam layar ikut berjalan sebagai cadangan di awal rekaman: bila tap menerima suara, cadangan
+  dihentikan; bila rekam layar mendengar suara ±1,5 detik sementara tap hening total, rekaman otomatis
+  beralih ke rekam layar. Sumber yang dipakai tercatat di `rekaman.log` (baris "Audio sistem").
+
 ## 3.4.2
 
 - Perbaikan: "Gagal mulai merekam ... -10875" (unit audio mic gagal diinisialisasi). Mic kini dinyalakan dengan

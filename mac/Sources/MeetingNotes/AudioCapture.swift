@@ -56,6 +56,15 @@ final class AudioCapture: NSObject, SCStreamOutput, SCStreamDelegate {
     private var tap: AnyObject?
     private var systemPrebuffer = AudioCapture.screenPrebuffer
     private(set) var systemSourceText = "rekam layar"
+    /// Sumber audio meeting yang sedang dipakai untuk rekaman.
+    private enum SystemSource { case tap, screen }
+    private var activeSource = SystemSource.screen
+    /// Rekam layar berjalan sebagai cadangan sampai Core Audio tap terbukti menerima suara (lihat `probe`).
+    private var probing = false
+    /// Detik suara yang terdengar lewat rekam layar selama tap masih hening (hanya di `systemQueue`).
+    private var screenHeardSeconds: Double = 0
+    /// Puncak di atas ini dianggap ada suara (hening dari izin yang belum diberikan = nol mutlak).
+    private static let audibleLevel: Float = 0.001
     private var systemSilenceReported = false
     /// Bisa diganti mesin baru bila mesin lama gagal menyala (lihat `startMicRecovering`).
     private var engine = AVAudioEngine()
@@ -210,6 +219,9 @@ final class AudioCapture: NSObject, SCStreamOutput, SCStreamDelegate {
         if useCoreAudioTap, #available(macOS 14.2, *) {
             do {
                 try startTap()
+                // Tap tetap "berhasil" walau izin System Audio Recording belum diberikan (macOS hanya memberinya
+                // hening). Rekam layar ikut berjalan sebagai cadangan sampai terbukti mana yang mendengar suara.
+                await startScreenProbe()
                 return nil
             } catch {
                 note("Core Audio tap gagal (\(error.localizedDescription)); memakai rekam layar")
@@ -218,6 +230,7 @@ final class AudioCapture: NSObject, SCStreamOutput, SCStreamDelegate {
         #endif
         do {
             try await startSystemAudio()
+            setSource(.screen)
             systemAudioActive = true
             systemSourceText = "rekam layar"
             note("Audio sistem mulai (rekam layar)")
@@ -229,11 +242,72 @@ final class AudioCapture: NSObject, SCStreamOutput, SCStreamDelegate {
         }
     }
 
+    private func setSource(_ source: SystemSource) {
+        lock.lock()
+        activeSource = source
+        systemPrebuffer = source == .tap ? Self.tapPrebuffer : Self.screenPrebuffer
+        systemFlowing = false
+        lock.unlock()
+    }
+
+    private func startScreenProbe() async {
+        do {
+            try await startSystemAudio()
+            lock.lock()
+            probing = true
+            lock.unlock()
+            note("Rekam layar berjalan sebagai cadangan sampai Core Audio tap terbukti menerima suara")
+        } catch {
+            note("Cadangan rekam layar tidak tersedia (\(error.localizedDescription)); hanya Core Audio tap")
+        }
+    }
+
+    private func stopScreenCapture() {
+        guard let active = scStream else { return }
+        scStream = nil
+        Task { try? await active.stopCapture() }
+    }
+
+    /// Selama tap belum terbukti (di `systemQueue`): bila tap menerima suara, cadangan rekam layar dihentikan.
+    /// Bila rekam layar mendengar suara ±1,5 detik sementara tap tetap hening total, izin tap belum ada: rekaman
+    /// beralih ke rekam layar dan tap dihentikan.
+    private func probe(_ pcm: AVAudioPCMBuffer, source: SystemSource) {
+        let peak = Self.rawPeak(pcm)
+        guard peak > Self.audibleLevel else { return }
+        if source == .tap {
+            lock.lock()
+            probing = false
+            lock.unlock()
+            note("Core Audio tap menerima suara; cadangan rekam layar dihentikan")
+            DispatchQueue.main.async { [weak self] in self?.stopScreenCapture() }
+            return
+        }
+        screenHeardSeconds += Double(pcm.frameLength) / max(pcm.format.sampleRate, 1)
+        guard screenHeardSeconds >= 1.5 else { return }
+        lock.lock()
+        probing = false
+        lock.unlock()
+        setSource(.screen)
+        systemSourceText = "rekam layar (Core Audio tap hening)"
+        note("Core Audio tap hening total padahal rekam layar mendengar suara (izin System Audio Recording Only "
+            + "belum diberikan?); beralih ke rekam layar")
+        DispatchQueue.main.async { [weak self] in self?.stopTap() }
+    }
+
+    private static func rawPeak(_ pcm: AVAudioPCMBuffer) -> Float {
+        guard let data = pcm.floatChannelData else { return 0 }
+        let count = Int(pcm.frameLength) * (pcm.format.isInterleaved ? Int(pcm.format.channelCount) : 1)
+        guard count > 0 else { return 0 }
+        var peak: Float = 0
+        vDSP_maxmgv(data[0], 1, &peak, vDSP_Length(count))
+        return peak
+    }
+
     #if compiler(>=5.9.2)
     @available(macOS 14.2, *)
     private func startTap() throws {
         let newTap = SystemAudioTap(ioQueue: systemQueue, excludedBundleIDs: Self.excludedApps) { [weak self] buffer in
-            self?.handleSystem(buffer)
+            self?.handleSystem(buffer, source: .tap)
         }
         newTap.onDeviceChange = { [weak self] in self?.restartTap() }
         try newTap.start()
@@ -242,9 +316,7 @@ final class AudioCapture: NSObject, SCStreamOutput, SCStreamDelegate {
             newTap.stop()
             return
         }
-        lock.lock()
-        systemPrebuffer = Self.tapPrebuffer
-        lock.unlock()
+        setSource(.tap)
         tap = newTap
         systemAudioActive = true
         systemSourceText = "Core Audio tap, \(newTap.formatText)"
@@ -254,7 +326,10 @@ final class AudioCapture: NSObject, SCStreamOutput, SCStreamDelegate {
     /// Perangkat output berganti (headset dipasang/dilepas): pasang ulang tap pada perangkat yang baru.
     @available(macOS 14.2, *)
     private func restartTap() {
-        guard running, let old = tap as? SystemAudioTap else { return }
+        lock.lock()
+        let usingTap = activeSource == .tap
+        lock.unlock()
+        guard running, usingTap, let old = tap as? SystemAudioTap else { return }
         old.stop()
         tap = nil
         do {
@@ -268,6 +343,7 @@ final class AudioCapture: NSObject, SCStreamOutput, SCStreamDelegate {
                 guard let self, self.running else { return }
                 do {
                     try await self.startSystemAudio()
+                    self.setSource(.screen)
                     self.systemAudioActive = true
                     self.systemSourceText = "rekam layar"
                 } catch {
@@ -566,12 +642,19 @@ final class AudioCapture: NSObject, SCStreamOutput, SCStreamDelegate {
         try? sampleBuffer.withAudioBufferList { list, _ in
             guard let pcm = AVAudioPCMBuffer(pcmFormat: format, bufferListNoCopy: list.unsafePointer)
             else { return }
-            handleSystem(pcm)
+            handleSystem(pcm, source: .screen)
         }
     }
 
     /// Potongan audio meeting (dari Core Audio tap atau rekam layar), selalu di `systemQueue`.
-    private func handleSystem(_ pcm: AVAudioPCMBuffer) {
+    private func handleSystem(_ pcm: AVAudioPCMBuffer, source: SystemSource) {
+        lock.lock()
+        let active = activeSource
+        let isProbing = probing
+        lock.unlock()
+        if isProbing { probe(pcm, source: source) }
+        // Sumber cadangan hanya dipantau, tidak ikut direkam (agar suara tidak dobel).
+        guard source == active else { return }
         let format = pcm.format
         if systemConverter == nil || systemFormat != format {
             systemConverter = Self.makeConverter(from: format)
