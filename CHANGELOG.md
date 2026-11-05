@@ -2,6 +2,16 @@
 
 Format versi: `MAYOR.FITUR.PERBAIKAN` (lihat [docs/ROADMAP.md](docs/ROADMAP.md)).
 
+## 3.4.7
+
+- **Istilah developer di teks abu-abu (pengenal Apple)**: koreksi bawaan untuk salah dengar yang umum, mis.
+  "front N" → frontend (dilaporkan), "back N/bek end" → backend, "full request" → pull request, "setaging" →
+  staging, "flag ing" → flagging, "bandling" → bundling. Kata biasa seperti "front" sendirian tidak diubah.
+- **Koreksi Whisper lebih cepat untuk bicara panjang tanpa jeda**: dipotong paling lambat tiap 7 detik
+  (sebelumnya 10), sehingga teks abu-abu lebih cepat diganti teks putih. Simulasi: jeda median 1,4 s, p90 1,6 s,
+  terlama 6,6 s (sebelumnya 8,2 s).
+- 68 tes lulus.
+
 ## 3.4.6
 
 Perbaikan: transkrip live menampilkan "Pada Pada Pada ..." saat hening (halusinasi Whisper pada derau).

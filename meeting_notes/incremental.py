@@ -2,7 +2,7 @@
 
 Aplikasi Mac menjalankan `python -m meeting_notes ikuti <folder rekaman>` saat mulai merekam. Proses ini membaca
 `sistem.wav` dan `mic.wav` yang terus bertambah dan mentranskripsi per ucapan: begitu ada jeda bicara +-0,4 detik
-(atau paling lama 10 detik bicara tanpa jeda), potongan itu langsung ditranskripsi, bergantian per jalur. Bagian
+(atau paling lama 7 detik bicara tanpa jeda), potongan itu langsung ditranskripsi, bergantian per jalur. Bagian
 yang hanya berisi derau (mis. mic saat kamu mendengarkan) dilewati tanpa memanggil Whisper. Setiap potongan:
 - disimpan ke `transkrip_parsial.json`, sehingga saat rapat selesai `proses` hanya perlu mentranskripsi
   beberapa detik terakhir, berapa pun panjang rapatnya;
@@ -36,7 +36,7 @@ TRACKS = {"sistem": "sistem.wav", "mic": "mic.wav"}
 # Potongan per ucapan agar koreksi live muncul 1-3 detik setelah kalimat selesai. Setiap potongan diberi akhir
 # kalimat potongan sebelumnya sebagai konteks.
 LIVE_MIN_SECONDS = 1.5      # potongan terpendek (ucapan sangat pendek digabung dengan jeda sesudahnya)
-LIVE_MAX_SECONDS = 10.0     # bicara tanpa jeda dipotong di titik paling sunyi paling lambat di sini
+LIVE_MAX_SECONDS = 7.0      # bicara tanpa jeda dipotong di titik paling sunyi paling lambat di sini
 LIVE_PAUSE_SECONDS = 0.4    # jeda yang menandai akhir ucapan
 LIVE_FRAME = SAMPLE_RATE // 20   # 50 ms
 # Di atas derau ruangan x NOISE_MARGIN dianggap suara. Batas bawah sama dengan ambang minimum speech_spans,

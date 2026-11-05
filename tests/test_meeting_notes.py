@@ -643,7 +643,7 @@ def test_background_transcription_then_process_only_transcribes_the_rest(tmp_pat
     state = incremental.load_state(tmp_path)
     for name, file in incremental.TRACKS.items():
         incremental.advance(tmp_path, state, background, name, incremental.GrowingWav(tmp_path / file))
-    # Bicara tanpa jeda: dipotong paling lambat tiap 10 detik; potongan terakhir (rapat masih berjalan) ditunda.
+    # Bicara tanpa jeda: dipotong paling lambat tiap 7 detik; potongan terakhir (rapat masih berjalan) ditunda.
     saved = incremental.load_state(tmp_path)
     assert 7 * 60 - 11 < saved["sistem"]["until"] < 7 * 60
     assert len(background.chunks) == 2 * len(saved["sistem"]["segments"])
@@ -835,7 +835,7 @@ def test_plan_cut_ends_utterance_at_pause():
 
     window = np.concatenate([_speech(3), _noise(1.2)])
     cut, has_speech = plan_cut(window, floor=0.004, complete=False)
-    # Dipotong di tengah jeda pertama setelah ucapan (bukan menunggu 10 detik).
+    # Dipotong di tengah jeda pertama setelah ucapan (bukan menunggu batas maksimum).
     assert has_speech and 3.0 < cut / 16000 < 3.4
 
 
@@ -918,3 +918,13 @@ def test_live_update_never_shows_repetition_hallucination():
     }
     _, segments = live_update(state, 0.0)
     assert [s.text for s in segments] == ["nanti di-deploy setelah UAT"]
+
+
+def test_base_corrections_fix_apple_dev_term_mishearings():
+    pairs = read_corrections(BASE_CORRECTIONS_PATH)
+    text, _ = apply_corrections("Di sini macet jam 8 dari front N ada pada dari tadi, back end aman", pairs)
+    assert text == "Di sini macet jam 8 dari frontend ada pada dari tadi, backend aman"
+    text, _ = apply_corrections("tolong cek full request di setaging", pairs)
+    assert text == "tolong cek pull request di staging"
+    # Kata biasa yang mirip tidak ikut berubah.
+    assert apply_corrections("di depan (front) nanti", pairs)[0] == "di depan (front) nanti"
