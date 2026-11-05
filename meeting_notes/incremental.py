@@ -26,6 +26,7 @@ from .transcriber import (
     SAMPLE_RATE,
     Segment,
     Transcriber,
+    clean_segments,
     merge_tracks,
 )
 from .wavio import GrowingWav
@@ -45,6 +46,10 @@ SILENCE_LEVEL = 1.5e-3
 # Pengaman: level di atas ini (-40 dBFS) selalu dianggap suara, walau perkiraan derau keliru tinggi (mis. rekaman
 # dimulai saat orang sedang bicara tanpa jeda). Ucapan tidak pernah dilewati sebagai derau.
 SPEECH_ALWAYS = 0.01
+# Potongan baru dikirim ke Whisper bila berisi suara BERUNTUN minimal 0,25 detik (kata terpendek seperti "ya"
+# sudah sepanjang itu). Bunyi sesaat (ketukan keyboard, klik, napas) dilewati walau banyak: Whisper cenderung
+# berhalusinasi ("Pada Pada Pada ...") pada potongan seperti itu.
+MIN_VOICED_FRAMES = 5
 # Bila transkripsi butuh lebih dari 40% durasi audio (dua jalur bergantian), Mac terlalu sibuk selama rapat
 # (Zoom/Teams bisa tersendat) dan berisiko tidak mengejar: turun ke model turbo yang +-3x lebih cepat.
 MAX_REALTIME_FACTOR = 0.4
@@ -96,6 +101,21 @@ def update_floor(floor: float, levels: np.ndarray) -> float:
     return (1 - weight) * floor + weight * low
 
 
+def longest_voiced_run(loud: np.ndarray) -> int:
+    """Rangkaian frame bersuara terpanjang; celah satu frame (jeda mikro antar-suku kata) tetap dihitung bersambung."""
+    best = run = gap = 0
+    for voiced in loud:
+        if voiced:
+            run += 1 + gap
+            gap = 0
+            best = max(best, run)
+        elif run and gap == 0:
+            gap = 1
+        else:
+            run = gap = 0
+    return best
+
+
 def plan_cut(window: np.ndarray, floor: float, complete: bool) -> tuple[int, bool] | None:
     """Potongan live berikutnya dari awal `window`: (panjang dalam sampel, berisi suara?), atau None (tunggu).
 
@@ -118,6 +138,10 @@ def plan_cut(window: np.ndarray, floor: float, complete: bool) -> tuple[int, boo
     first = int(np.argmax(loud))
     if first >= min_frames:
         return ((first - pause // 2) * LIVE_FRAME, False)
+
+    def result(cut_frame: int) -> tuple[int, bool]:
+        return (cut_frame * LIVE_FRAME, longest_voiced_run(loud[:cut_frame]) >= MIN_VOICED_FRAMES)
+
     run_start = -1
     for i in range(first, n):
         if loud[i]:
@@ -126,12 +150,11 @@ def plan_cut(window: np.ndarray, floor: float, complete: bool) -> tuple[int, boo
         if run_start < 0:
             run_start = i
         if i - run_start + 1 >= pause and i >= min_frames:
-            return (max(run_start + pause // 2, min_frames) * LIVE_FRAME, True)
+            return result(max(run_start + pause // 2, min_frames))
     if not complete:
         return None
     max_frames = min(n, int(LIVE_MAX_SECONDS * per_second))
-    quietest = min_frames + int(np.argmin(levels[min_frames:max_frames]))
-    return (quietest * LIVE_FRAME, True)
+    return result(min_frames + int(np.argmin(levels[min_frames:max_frames])))
 
 
 def advance(folder: Path, state: dict, transcriber: Transcriber, name: str, reader: GrowingWav,
@@ -182,7 +205,9 @@ def live_update(state: dict, emitted_until: float) -> tuple[float, list[Segment]
         return emitted_until, []
 
     def fresh(name: str) -> list[Segment]:
-        return [s for s in tracks[name][1] if emitted_until <= s.start < until]
+        # Dibersihkan seperti notulen akhir: halusinasi pengulangan dan kalimat "terima kasih telah menonton"
+        # tidak pernah tampil di transkrip live.
+        return clean_segments([s for s in tracks[name][1] if emitted_until <= s.start < until])
 
     return until, merge_tracks(fresh("sistem"), fresh("mic"))
 

@@ -279,10 +279,30 @@ final class LiveTranscriber {
         let committed = committedWords.filter { $0.time >= cutoff }.map(\.text).joined(separator: " ")
         let partial = (carriedWords + partialWords).filter { $0.time >= cutoff }.map(\.text).joined(separator: " ")
         return Caption(
-            refined: corrections.apply(refined),
-            committed: corrections.apply(committed),
-            partial: corrections.apply(partial)
+            refined: Self.collapseRepeatedWords(corrections.apply(refined)),
+            committed: Self.collapseRepeatedWords(corrections.apply(committed)),
+            partial: Self.collapseRepeatedWords(corrections.apply(partial))
         )
+    }
+
+    /// Pengaman terakhir di layar: kata yang sama berturut-turut lebih dari dua kali ("Pada Pada Pada ...",
+    /// tanda halusinasi pada hening) disisakan dua saja. "ya ya" yang wajar tetap tampil.
+    static func collapseRepeatedWords(_ text: String) -> String {
+        var kept: [Substring] = []
+        var lastKey = ""
+        var run = 0
+        for token in text.split(separator: " ") {
+            let key = token.lowercased().filter { $0.isLetter || $0.isNumber }
+            if !key.isEmpty && key == lastKey {
+                run += 1
+                if run >= 2 { continue }
+            } else {
+                lastKey = key
+                run = 0
+            }
+            kept.append(token)
+        }
+        return kept.joined(separator: " ")
     }
 
     /// Kirim teks ke UI. Hasil final dan koreksi Whisper selalu dikirim; hasil sementara dibatasi ±10x per detik

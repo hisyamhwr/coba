@@ -2,6 +2,21 @@
 
 Format versi: `MAYOR.FITUR.PERBAIKAN` (lihat [docs/ROADMAP.md](docs/ROADMAP.md)).
 
+## 3.4.6
+
+Perbaikan: transkrip live menampilkan "Pada Pada Pada ..." saat hening (halusinasi Whisper pada derau).
+Ditutup berlapis, sehingga satu lapis yang lolos ditangkap lapis berikutnya:
+1. **Derau tidak dikirim ke Whisper**: potongan baru ditranskripsi bila berisi suara beruntun ≥ 0,25 detik.
+   Uji 5 menit hening + 120 ketukan keyboard + 20 napas: panggilan Whisper 20 → 5 (ruangan tenang),
+   22 → 14 (ruangan bising). Kata pendek "ya" tetap ditranskripsi.
+2. **Hasil berulang dibuang di sumber**: segmen dengan rasio kompresi > 2,4 (tanda pengulangan menurut
+   Whisper) dibuang, baik di MLX maupun faster-whisper.
+3. **Halusinasi pengulangan dibuang seluruhnya**: teks yang setelah diringkas hanya tersisa ≤ 2 kata berbeda
+   ("Pada Pada ...") dibuang, bukan diringkas jadi "Pada". Berlaku juga untuk notulen akhir.
+4. **Transkrip live dibersihkan seperti notulen akhir** sebelum dikirim ke layar (sebelumnya mentah).
+5. **Pengaman di layar (aplikasi Mac)**: kata yang sama berturut-turut lebih dari dua kali tidak pernah tampil.
+- Tes baru untuk setiap lapis; 67 tes lulus; jeda koreksi live tetap median 1,4 detik.
+
 ## 3.4.5
 
 Optimasi transkrip live (koreksi Whisper), diuji dengan simulasi rapat (`tools/simulasi_live.py`):

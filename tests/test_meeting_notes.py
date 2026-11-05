@@ -29,6 +29,7 @@ from meeting_notes.transcriber import (
     chunk_bounds,
     clean_segments,
     collapse_repeats,
+    is_repetition,
     normalize_loudness,
     remove_rumble,
     Condensed,
@@ -133,6 +134,16 @@ def test_collapse_repeats_when_whisper_gets_stuck():
     assert collapse_repeats("oke oke kita mulai, sangat sangat penting") == "oke oke kita mulai, sangat sangat penting"
     loop = [Segment(0, 30, "aku sempat " + "mengecek dan " * 30)]
     assert clean_segments(loop)[0].text == "aku sempat mengecek dan"
+
+
+def test_repetition_hallucination_on_silence_is_dropped_entirely():
+    # Hening/derau: Whisper menghasilkan "Pada Pada Pada ..." (dilaporkan dari transkrip live 3.4.5).
+    stuck = [Segment(0, 9, "Pada " * 30), Segment(9, 18, "Pada. Pada, pada pada"),
+             Segment(18, 20, "Kemarin kita bahas flagging")]
+    assert [s.text for s in clean_segments(stuck)] == ["Kemarin kita bahas flagging"]
+    # Ucapan wajar yang pendek atau mengulang sedikit tetap ada.
+    assert is_repetition("ya ya oke ya") is False
+    assert is_repetition("oke oke kita mulai") is False
 
 
 def test_chunk_bounds_cut_at_quietest_point():
@@ -887,3 +898,23 @@ def test_live_correction_latency_simulation():
     assert len(latency) == total
     assert np.median(latency) < 3.0 and np.percentile(latency, 90) < 5.0
     assert left < 5
+
+
+def test_plan_cut_skips_short_click_in_noise():
+    from meeting_notes.incremental import plan_cut
+
+    window = _noise(4)
+    window[16000:16000 + 1600] += 0.2  # ketukan/klik 0,1 detik
+    _, has_speech = plan_cut(window, floor=0.004, complete=False)
+    assert not has_speech
+
+
+def test_live_update_never_shows_repetition_hallucination():
+    from meeting_notes.incremental import live_update
+
+    state = {
+        "sistem": {"until": 20.0, "segments": [[1, 9, "Pada " * 25], [10, 14, "nanti di-deploy setelah UAT"]]},
+        "mic": {"until": 20.0, "segments": [[15, 17, "terima kasih telah menonton"]]},
+    }
+    _, segments = live_update(state, 0.0)
+    assert [s.text for s in segments] == ["nanti di-deploy setelah UAT"]

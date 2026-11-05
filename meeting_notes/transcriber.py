@@ -128,10 +128,28 @@ def collapse_repeats(text: str) -> str:
     return _REPEAT.sub(r"\1", text)
 
 
+# Whisper menandai teks yang sangat berulang dengan rasio kompresi tinggi (ambang bawaan Whisper 2,4).
+MAX_COMPRESSION_RATIO = 2.4
+
+
+def is_repetition(text: str) -> bool:
+    """Teks yang hanya berisi pengulangan ("Pada Pada Pada ..."): tanda Whisper berhalusinasi pada hening atau
+    derau. Dibuang seluruhnya, bukan diringkas jadi "Pada". Bila setelah diringkas masih ada ucapan lain
+    ("aku sempat mengecek dan mengecek dan ..."), teks itu dipertahankan (diringkas oleh collapse_repeats).
+    """
+    words = _normalize(text).split()
+    if len(words) < 4:
+        return False
+    collapsed = _normalize(collapse_repeats(text)).split()
+    return len(collapsed) < len(words) and len(set(collapsed)) <= 2
+
+
 def clean_segments(segments: list[Segment]) -> list[Segment]:
     """Buang halusinasi Whisper dan baris yang terulang beruntun."""
     result: list[Segment] = []
     for seg in segments:
+        if is_repetition(seg.text):
+            continue
         seg = Segment(seg.start, seg.end, collapse_repeats(seg.text).strip(), seg.speaker)
         norm = _normalize(seg.text)
         if not norm:
@@ -363,7 +381,10 @@ class _FasterWhisperEngine:
             # Lewati bagian sunyi yang memicu halusinasi (butuh word_timestamps).
             word_timestamps=True, hallucination_silence_threshold=2.0,
         )
-        return [Segment(s.start, s.end, s.text.strip()) for s in segments]
+        return [
+            Segment(s.start, s.end, s.text.strip()) for s in segments
+            if (s.compression_ratio or 0) <= MAX_COMPRESSION_RATIO
+        ]
 
 
 # Cache GPU MLX dibatasi: tanpa batas, buffer yang pernah dipakai disimpan terus dan pemakaian memori proses
@@ -418,6 +439,7 @@ class _MlxEngine:
             Segment(s["start"], s["end"], s["text"].strip())
             for s in result["segments"]
             if not (s.get("no_speech_prob", 0) > 0.6 and s.get("avg_logprob", 0) < -1.0)
+            and s.get("compression_ratio", 0) <= MAX_COMPRESSION_RATIO
         ]
 
 
