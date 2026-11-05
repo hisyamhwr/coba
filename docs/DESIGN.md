@@ -1,7 +1,7 @@
 # Sistem desain pulau (aplikasi Mac)
 
 Gaya: **AI-native dark** ala Dynamic Island, modern dan ceria. Permukaan hitam pekat menyatu dengan notch; setiap status punya
-satu warna aksen agar terbaca sekilas; satu elemen utama besar per status (timer, transkrip live, judul rapat).
+satu warna aksen agar terbaca sekilas; satu elemen utama besar per status (timer, kartu info rekaman, judul rapat).
 Satu identitas warna biru-cyan-tosca (dipilih pengguna); ungu sengaja tidak dipakai agar tidak menjadi gradien
 biru-ungu yang terkesan generik ("AI slop", lihat skill `swiftui-design-skill`).
 
@@ -18,12 +18,11 @@ dan merah koral hanya untuk rekam/stop/peringatan (merah tetap tanda "sedang mer
 | `lime` | `#C3F53C` | Aksen: momen Penting (bintang, jumlah, riak) |
 | `red` / `coral` | `#FF4D6D` / `#FF7A8A` | Titik rekam & tombol stop (`record`) / peringatan & gagal |
 | `navy` | `#0B1E3F` | Ikon di atas gradien terang (logo) |
-| kata live sementara | cyan → mint | Kata yang masih dikenali (pengenal Apple) |
-| `secondary` / `refined` | putih 66% / 94% | Kata live dari pengenal Apple (belum dikoreksi) / sudah dikoreksi Whisper |
+| `secondary` | putih 66% | Teks kartu info rekaman |
 | `muted` | putih 55% | Teks sekunder (kontras ±6:1 di atas hitam) |
 | `chip` | putih 10% | Latar tombol kapsul/ikon |
 | `rim` | putih 24% → 4% (atas → bawah) | Tepi "kaca" pada tombol, chip, dan kartu |
-| `card` | putih 5,5% | Kartu transkrip live |
+| `card` | putih 5,5% | Kartu info rekaman (video, sisa disk) |
 
 ## Tipografi
 
@@ -74,7 +73,6 @@ Data yang berubah cepat dipecah per objek agar tiap perubahan hanya menggambar u
 |---|---|---|
 | `AudioLevels` (level campuran, mic, meeting) | ±10x/detik | Equalizer, chip jalur suara, cahaya rekam |
 | `RecordingClock` | 1x/detik | Timer |
-| `LiveCaption` (teks final + kata sementara) | ±7x/detik saat bicara | Transkrip live |
 | `AppState` | jarang | Bentuk & isi pulau |
 
 Sebelumnya level suara dan teks live berada di satu objek, sehingga teks tiga baris ikut ditata ulang setiap

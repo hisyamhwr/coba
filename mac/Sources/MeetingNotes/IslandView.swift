@@ -249,13 +249,45 @@ struct IslandView: View {
             }
             HStack(spacing: 6) {
                 toggleChip("Word", icon: "doc.richtext", isOn: $state.exportDocx, help: "Buat juga file Word (.docx)")
-                toggleChip("Live", icon: "captions.bubble", isOn: $state.liveTranscript,
-                           help: "Transkrip live selama rapat")
+                toggleChip("Video", icon: "video", isOn: videoEnabled,
+                           help: "Rekam video layar 720p (pilih seluruh layar, Teams, atau Zoom di menu bar)")
                 Spacer()
                 iconButton("folder", help: "Buka folder notulen") { controller.openFolder() }
                 iconButton("xmark", help: "Tutup", action: collapse)
             }
             .entrance(0.14)
+        }
+    }
+
+    /// Centang Video di panel Siap: mati = audio saja; nyala = seluruh layar (jendela Teams/Zoom dipilih di menu).
+    private var videoEnabled: Binding<Bool> {
+        Binding(
+            get: { state.videoSource != .off },
+            set: { state.videoSource = $0 ? .screen : .off }
+        )
+    }
+
+    private var diskLow: Bool {
+        (state.diskMinutesLeft ?? Int.max) < 30
+    }
+
+    private var diskText: String {
+        guard let minutes = state.diskMinutesLeft else { return "Mengecek ruang disk…" }
+        if minutes >= 120 { return "Sisa disk ±\(minutes / 60) jam rekaman" }
+        if minutes >= 60 { return "Sisa disk ±1 jam \(minutes - 60) menit rekaman" }
+        return "Sisa disk ±\(minutes) menit rekaman"
+    }
+
+    private func infoRow(_ icon: String, _ text: String, color: Color) -> some View {
+        HStack(spacing: 8) {
+            Image(systemName: icon)
+                .font(.system(size: 11, weight: .semibold))
+                .foregroundStyle(color)
+                .frame(width: 16)
+            Text(text)
+                .font(Typo.label)
+                .foregroundStyle(Palette.secondary)
+                .lineLimit(1)
         }
     }
 
@@ -343,10 +375,16 @@ struct IslandView: View {
                 SourceChip(audio: meter.audio, source: .meeting)
                 iconButton("chevron.up", help: "Perkecil", action: collapse)
             }
-            LiveText(caption: meter.caption)
-                .padding(.horizontal, 12)
-                .padding(.vertical, 9)
-                .background(CaptionCard())
+            // Kartu info: apa yang direkam dan sisa disk (tanpa transkrip live sejak 4.0.0).
+            VStack(alignment: .leading, spacing: 6) {
+                infoRow("video.fill", state.videoText.isEmpty ? "Menyiapkan video…" : state.videoText,
+                        color: Palette.cyan)
+                infoRow("internaldrive", diskText, color: diskLow ? Palette.coral : Palette.mint)
+            }
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .padding(.horizontal, 12)
+            .padding(.vertical, 10)
+            .background(CaptionCard())
             if let warning = state.warning {
                 Label(warning, systemImage: "exclamationmark.triangle.fill")
                     .font(.system(size: 10, weight: .regular))
@@ -495,6 +533,9 @@ struct IslandView: View {
                         try? await Task.sleep(nanoseconds: 1_500_000_000)
                         withAnimation(Liquid.press) { copied = false }
                     }
+                }
+                if controller.videoURL != nil {
+                    iconButton("play.rectangle", help: "Putar video rapat") { controller.openVideo() }
                 }
                 iconButton("folder", help: "Buka folder notulen") { controller.openFolder() }
                 if summarized {
@@ -978,59 +1019,6 @@ private struct ElapsedText: View {
             .font(Typo.number(size))
             .contentTransition(.numericText())
             .animation(.snappy(duration: 0.25), value: Int(clock.elapsed))
-    }
-}
-
-/// Transkrip live. Selalu menampilkan kata-kata TERBARU: teks lama dipotong di depan (bukan di belakang),
-/// sehingga ucapan terakhir tidak pernah terpotong di kanan. Kata yang masih dikenali (bisa berubah) tampil
-/// dengan gradien cyan-mint, lalu berubah putih begitu final.
-private struct LiveText: View {
-    @ObservedObject var caption: LiveCaption
-
-    /// Kira-kira muat 3 baris pada lebar pulau dengan huruf 15 pt.
-    private static let maxCharacters = 150
-
-    var body: some View {
-        Group {
-            if caption.refined.isEmpty && caption.committed.isEmpty && caption.partial.isEmpty {
-                Text("Mendengarkan…").foregroundStyle(Palette.muted)
-            } else {
-                captionText
-            }
-        }
-        .font(Typo.live)
-        .lineSpacing(2)
-        .lineLimit(3)
-        .truncationMode(.head)
-        .frame(maxWidth: .infinity, alignment: .bottomLeading)
-        .frame(height: 62, alignment: .bottomLeading)
-        .animation(.easeOut(duration: 0.12), value: caption.partial)
-        .animation(.easeOut(duration: 0.25), value: caption.refined)
-    }
-
-    /// Tiga lapis dengan warna berbeda: sudah dikoreksi Whisper (putih), kata Apple yang belum dikoreksi
-    /// (abu-abu), dan kata yang sedang dikenali (gradien). Hanya ±150 karakter terakhir yang ditampilkan.
-    private var captionText: Text {
-        let partial = Self.tail(caption.partial, Self.maxCharacters)
-        var budget = max(0, Self.maxCharacters - partial.count)
-        let committed = Self.tail(caption.committed, budget)
-        budget = max(0, budget - committed.count)
-        let refined = budget > 0 ? Self.tail(caption.refined, budget) : ""
-        let gap1 = refined.isEmpty || (committed.isEmpty && partial.isEmpty) ? "" : " "
-        let gap2 = committed.isEmpty || partial.isEmpty ? "" : " "
-        let first: Text = Text(refined).foregroundStyle(Palette.refined)
-        let second: Text = Text(committed).foregroundStyle(Palette.secondary)
-        let third: Text = Text(partial).foregroundStyle(Palette.partial)
-        let firstTwo: Text = first + Text(gap1) + second
-        return firstTwo + Text(gap2) + third
-    }
-
-    /// Bagian akhir teks (maksimal `limit` karakter), dipotong di batas kata dan diawali "…".
-    static func tail(_ text: String, _ limit: Int) -> String {
-        guard text.count > limit else { return text }
-        let suffix = text.suffix(limit)
-        let start = suffix.firstIndex(of: " ").map { suffix.index(after: $0) } ?? suffix.startIndex
-        return "…" + suffix[start...]
     }
 }
 

@@ -556,24 +556,10 @@ final class AudioCapture: NSObject, SCStreamOutput, SCStreamDelegate {
               let systemOut = Self.makeBuffer(systemTrack)
         else { return }
 
-        // Umpan transkrip live: tiap jalur dikuatkan ke level yang stabil lalu dicampur, sehingga suara peserta
-        // yang pelan dan suara kita yang jauh dari mic sama-sama terdengar jelas oleh pengenal suara.
         var micRMS: Float = 0
         vDSP_rmsqv(mic, 1, &micRMS, vDSP_Length(mic.count))
         var systemRMS: Float = 0
         if !system.isEmpty { vDSP_rmsqv(system, 1, &systemRMS, vDSP_Length(system.count)) }
-        // Saat peserta bicara lewat speaker, mic ikut menangkap gemanya: mic tidak dikuatkan banyak agar gema
-        // tidak menumpuk di atas suara asli.
-        let systemTalking = systemRMS > Leveler.floor
-        let liveMic = micLeveler.process(mic, maxGain: systemTalking ? 2 : Leveler.maxGain)
-        let liveSystem = systemLeveler.process(systemTrack, maxGain: Leveler.maxGain)
-        // Mic jauh lebih pelan dari suara peserta = kemungkinan besar hanya gema dari speaker: diredam di umpan
-        // live agar pengenal suara tidak mendengar kalimat yang sama dua kali. Saat kamu bicara, mic lebih keras.
-        let micWeight: Float = systemTalking && micRMS < systemRMS * 0.5 ? 0.3 : 1
-        var liveMix = liveMic
-        for i in 0..<liveMix.count {
-            liveMix[i] = Leveler.limit(liveMix[i] * micWeight + liveSystem[i])
-        }
 
         writeQueue.async { [weak self] in
             guard let self else { return }
@@ -589,10 +575,22 @@ final class AudioCapture: NSObject, SCStreamOutput, SCStreamDelegate {
                 self.onProblem?("Rekaman gagal disimpan (disk penuh?). Kosongkan ruang disk lalu mulai rekam lagi.")
             }
         }
-        if let onSamples, let liveOut = Self.makeBuffer(liveMix) {
-            var rms: Float = 0
-            vDSP_rmsqv(mixed, 1, &rms, vDSP_Length(mixed.count))
-            onSamples(liveOut, rms, Double(frames) / 16000)
+        // Umpan pengenal suara (opsional, tidak dipakai sejak 4.0.0): tiap jalur dikuatkan ke level stabil lalu
+        // dicampur; gema mic diredam saat peserta bicara lewat speaker. Hanya dihitung bila ada penerimanya.
+        if let onSamples {
+            let systemTalking = systemRMS > Leveler.floor
+            let liveMic = micLeveler.process(mic, maxGain: systemTalking ? 2 : Leveler.maxGain)
+            let liveSystem = systemLeveler.process(systemTrack, maxGain: Leveler.maxGain)
+            let micWeight: Float = systemTalking && micRMS < systemRMS * 0.5 ? 0.3 : 1
+            var liveMix = liveMic
+            for i in 0..<liveMix.count {
+                liveMix[i] = Leveler.limit(liveMix[i] * micWeight + liveSystem[i])
+            }
+            if let liveOut = Self.makeBuffer(liveMix) {
+                var rms: Float = 0
+                vDSP_rmsqv(mixed, 1, &rms, vDSP_Length(mixed.count))
+                onSamples(liveOut, rms, Double(frames) / 16000)
+            }
         }
         let micLevel = min(micRMS * 8, 1)
         let systemLevel = min(systemRMS * 8, 1)

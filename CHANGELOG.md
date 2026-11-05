@@ -2,6 +2,26 @@
 
 Format versi: `MAYOR.FITUR.PERBAIKAN` (lihat [docs/ROADMAP.md](docs/ROADMAP.md)).
 
+## 4.0.0
+
+**Alur baru: rekam rapat seperti OBS, lalu transkrip dan MoM otomatis setelah rapat selesai.** Tanpa transkrip
+live, sehingga Mac 8 GB tetap ringan selama rapat dan bagian yang bisa bermasalah jauh lebih sedikit.
+
+- **Rekaman video layar** `layar.mov`: 720p 30 fps (H.264 dengan encoder perangkat keras, ±1 GB per jam),
+  berisi layar, suara peserta, dan suara mic (macOS 15+). Jendela Meeting Notes sendiri tidak ikut terekam.
+- **Pilih sumber video** di menu bar: seluruh layar, jendela Teams saja, jendela Zoom saja, atau tidak direkam
+  (audio saja). Chip **Video** di panel Siap untuk menyalakan/mematikan cepat. Bila jendela Teams/Zoom tidak
+  ditemukan, seluruh layar yang direkam (tertulis di kartu info).
+- **Audio tetap dua jalur terpisah** (mic & peserta) seperti sebelumnya, untuk transkrip berlabel "Saya (mic)" /
+  "Peserta online". Video berjalan terpisah: gagal merekam video tidak pernah menghentikan rekaman audio.
+- **Sisa disk dipantau** dan ditampilkan sebagai menit/jam rekaman. Peringatan bila < 30 menit; bila < 10 menit
+  video dihentikan agar audio untuk notulen tetap terekam sampai rapat selesai.
+- **Setelah stop**: transkripsi Whisper penuh per jalur (potongan panjang, konteks lebih banyak), lalu MoM
+  otomatis dan notifikasi. Kartu Selesai punya tombol **Putar video**.
+- **Dihapus**: transkrip live (pengenal suara Apple, worker Whisper selama rapat, teks abu-abu/putih) beserta
+  menu dan izin terkaitnya dari alur. Worker `ikuti` tetap ada di Python untuk keperluan lain, tetapi tidak
+  dijalankan aplikasi.
+
 ## 3.4.7
 
 - **Istilah developer di teks abu-abu (pengenal Apple)**: koreksi bawaan untuk salah dengar yang umum, mis.

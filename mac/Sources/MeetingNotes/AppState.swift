@@ -27,7 +27,7 @@ struct NotesResult: Decodable, Equatable {
 
 /// Status pulau yang jarang berubah (fase, ukuran, hasil). Hanya diubah dari main actor.
 ///
-/// Data yang berubah berkali-kali per detik (timer, level suara, transkrip live) sengaja dipisah ke
+/// Data yang berubah berkali-kali per detik (timer, level suara) sengaja dipisah ke
 /// `LiveMeter`, supaya perubahan itu hanya menggambar ulang komponen kecilnya, bukan seluruh pulau.
 @MainActor
 final class AppState: ObservableObject {
@@ -49,10 +49,14 @@ final class AppState: ObservableObject {
     @Published var exportDocx = UserDefaults.standard.bool(forKey: "exportDocx") {
         didSet { UserDefaults.standard.set(exportDocx, forKey: "exportDocx") }
     }
-    /// Transkrip live bisa dimatikan untuk menghemat CPU/baterai; diingat antar sesi.
-    @Published var liveTranscript = UserDefaults.standard.object(forKey: "liveTranscript") as? Bool ?? true {
-        didSet { UserDefaults.standard.set(liveTranscript, forKey: "liveTranscript") }
+    /// Sumber video rekaman layar (seluruh layar / jendela Teams / jendela Zoom / tanpa video); diingat.
+    @Published var videoSource = VideoSource(rawValue: UserDefaults.standard.string(forKey: "videoSource") ?? "") ?? .screen {
+        didSet { UserDefaults.standard.set(videoSource.rawValue, forKey: "videoSource") }
     }
+    /// Keterangan video yang sedang direkam (mis. "Merekam seluruh layar · 720p").
+    @Published var videoText = ""
+    /// Perkiraan sisa disk dalam menit rekaman.
+    @Published var diskMinutesLeft: Int?
 
     /// Audio meeting lewat Core Audio tap (macOS 14.2+), EKSPERIMENTAL dan mati secara bawaan sampai terbukti di
     /// Mac pengguna. Bawaan = rekam layar (ScreenCaptureKit), cara yang sudah terbukti. Kunci baru agar pilihan
@@ -102,9 +106,9 @@ final class AppState: ObservableObject {
         case .idle: return expanded ? CGSize(width: 340, height: 106) : CGSize(width: 150, height: 32)
         case .recording:
             // Peringatan (mis. izin audio meeting) menambah satu baris.
-            return expanded ? CGSize(width: 460, height: warning == nil ? 198 : 222) : CGSize(width: 240, height: 32)
+            return expanded ? CGSize(width: 460, height: warning == nil ? 180 : 204) : CGSize(width: 240, height: 32)
         case .processing: return CGSize(width: 360, height: 70)
-        case .done: return CGSize(width: 460, height: result?.summarized == false ? 142 : 130)
+        case .done: return CGSize(width: 480, height: result?.summarized == false ? 142 : 130)
         case .failed: return CGSize(width: 440, height: 150)
         }
     }
@@ -115,13 +119,11 @@ final class AppState: ObservableObject {
 }
 
 /// Data yang berubah cepat selama rapat, dipecah per jenis. Masing-masing objek hanya diamati komponen kecil
-/// yang memakainya: level suara (±10x per detik) tidak lagi ikut menggambar ulang dan menata ulang teks
-/// transkrip live tiga baris, dan teks baru tidak menggambar ulang equalizer.
+/// yang memakainya: level suara (±10x per detik) tidak menggambar ulang timer, dan sebaliknya.
 @MainActor
 final class LiveMeter {
     let audio = AudioLevels()
     let clock = RecordingClock()
-    let caption = LiveCaption()
 
     /// Level campuran 0...1 (equalizer pulau ringkas, cahaya).
     var level: Float {
@@ -132,23 +134,6 @@ final class LiveMeter {
     var elapsed: TimeInterval {
         get { clock.elapsed }
         set { if clock.elapsed != newValue { clock.elapsed = newValue } }
-    }
-
-    var liveText: String {
-        get { caption.committed }
-        set { if caption.committed != newValue { caption.committed = newValue } }
-    }
-
-    /// Kata-kata yang masih dikenali (belum final), ditampilkan dengan warna aksen.
-    var livePartial: String {
-        get { caption.partial }
-        set { if caption.partial != newValue { caption.partial = newValue } }
-    }
-
-    /// Bagian yang sudah dikoreksi Whisper.
-    var liveRefined: String {
-        get { caption.refined }
-        set { if caption.refined != newValue { caption.refined = newValue } }
     }
 
     /// Level per jalur: suara kita (mic) dan suara peserta (audio meeting).
@@ -171,9 +156,3 @@ final class RecordingClock: ObservableObject {
     @Published var elapsed: TimeInterval = 0
 }
 
-@MainActor
-final class LiveCaption: ObservableObject {
-    @Published var refined = ""
-    @Published var committed = ""
-    @Published var partial = ""
-}

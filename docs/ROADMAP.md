@@ -31,9 +31,10 @@ Target: aplikasi pencatat rapat ala Fireflies yang berjalan langsung di Mac, tan
 | 3.2.0 | Bentuk pulau ala notch app modern: island dengan bahu melengkung (tanpa sudut siku) atau pill melayang, dipilih di menu bar | ✅ Kode selesai, menunggu QA di Mac |
 | 3.3.0 | Desain ulang panel Siap & Merekam: tombol Mulai ringkas, sapaan, chip Word/Live, kartu kaca, efek riak/kilau/masuk bertahap | ✅ Kode selesai, menunggu QA di Mac |
 | 3.4.0 | Core Audio tap (eksperimental sejak 3.4.4, bawaan kembali rekam layar), peredam derau mic, transkrip live dua lapis (Apple instan → koreksi Whisper) | ⚠️ Tap gagal di rapat sungguhan; QA ulang |
+| 4.0.0 | **Alur rekam → transkrip → MoM**: rekaman video layar 720p30 (seluruh layar / jendela Teams / Zoom), audio mic & peserta terpisah, pantau sisa disk, tanpa transkrip live (ringan untuk Mac 8 GB) | ✅ Kode selesai, menunggu QA di Mac |
 | 3.5.0 | **Ringan untuk Mac 8 GB**: model Whisper hemat memori, penjaga tekanan memori (koreksi live melambat, rekaman tidak pernah terganggu), pemakaian RAM/CPU dicatat di log | Rencana |
 | 3.6.0 | **Audio meeting lebih bagus**: verifikasi Core Audio tap di Mac pengguna, opsi hanya aplikasi meeting, deteksi suara peserta terlalu pelan/pecah, sinkron mic–meeting untuk rapat panjang | Rencana |
-| 3.7.0 | **Transkrip live menyerupai ucapan**: akurasi diukur otomatis (live vs final), jeda koreksi Whisper lebih pendek, kamus tim lebih kuat, teks tidak melompat saat dikoreksi | Rencana |
+| 3.7.0 | ~~Transkrip live menyerupai ucapan~~ | Dibatalkan: diganti alur 4.0.0 (tanpa transkrip live, transkrip akurat setelah rapat) |
 | 3.8.0 | Perpustakaan rapat, pencarian, dan "Tanya ke rapat" | |
 | 3.9.0 | Label pembicara per orang untuk peserta online (Whisper lokal) | Mic vs meeting sudah dibedakan di 2.1.0; per orang sudah ada lewat mesin cloud di 1.2.0 |
 

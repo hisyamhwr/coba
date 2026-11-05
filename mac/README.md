@@ -1,28 +1,35 @@
-# Meeting Notes untuk Mac (2.0.0)
+# Meeting Notes untuk Mac (4.0.0)
 
-Aplikasi menu bar dengan "pulau" ala Dynamic Island di tengah atas layar:
+Aplikasi menu bar dengan "pulau" ala Dynamic Island di tengah atas layar. Alurnya seperti OBS + notulis:
+**rekam rapat (video layar + suara) → stop → transkrip → MoM otomatis.**
 
 | Status | Tampilan |
 |---|---|
-| Siap | Kapsul kecil "Meeting Notes"; klik untuk membuka tombol **Mulai Catat** dan centang **Buat juga Word (.docx)** |
-| Merekam | Titik merah, timer, gelombang suara; klik untuk melihat transkrip live, **Tandai penting**, dan chip jalur suara (mic & peserta), dan tombol stop |
-| Memproses | Langkah *Mentranskrip → Mengoreksi → Menyusun MoM* |
-| Selesai | Judul rapat, jumlah keputusan & action item, tombol **Buka MoM**, **Salin**, **Folder** |
+| Siap | Kapsul kecil; klik untuk tombol **Mulai**, chip **Word** dan **Video** |
+| Merekam | Titik merah, timer, chip jalur suara (🎤 mic & 👥 peserta), kartu info (apa yang direkam, sisa disk dalam menit rekaman), **Penting**, tombol stop |
+| Memproses | *Mentranskrip (persen) → Menyusun MoM* |
+| Selesai | Judul rapat, jumlah keputusan & tugas, tombol **Buka MoM**, **Salin**, **Putar video**, **Folder** |
 
 Shortcut global **⌃⌥M** (Control + Option + M) untuk mulai/berhenti dari aplikasi mana pun.
 
-Menu bar (ikon gelombang) berisi: Mulai/Selesai, Buka folder notulen, **Buat juga Word (.docx)**,
-**Transkrip live** (matikan untuk menghemat CPU/baterai), dan Keluar.
+Menu bar (ikon gelombang): Mulai/Selesai, Buka folder notulen, **Buat juga Word (.docx)**, sumber video
+(**seluruh layar / jendela Teams saja / jendela Zoom saja / tidak direkam**), Audio meeting via Core Audio
+(eksperimental), Peredam derau mic, bentuk pulau (Island / Pill), dan Keluar.
 
 ## Cara kerja
 
-- **Aplikasi Swift (folder ini):** merekam mic + audio Zoom/Meet/Teams secara digital (ScreenCaptureKit,
-  tanpa BlackHole, tetap jalan saat pakai headphone), menampilkan transkrip live, dan mencatat momen penting.
-- **"Otak" Python 1.x (folder `meeting_notes`):** setelah rapat selesai, aplikasi menjalankan
-  `python -m meeting_notes proses` untuk transkripsi akurat, koreksi Claude, kamus, dan MoM. Semua pengaturan
-  `.env` (mesin transkripsi, Claude, dll.) tetap berlaku.
-- Transkrip live memakai pengenal suara bawaan macOS (bahasa Indonesia), hanya untuk ditampilkan. Bila Mac tidak
-  mendukung versi on-device, macOS memprosesnya di server Apple.
+- **Aplikasi Swift (folder ini)** merekam selama rapat, ringan untuk Mac 8 GB:
+  - `mic.wav` (suaramu) dan `sistem.wav` (suara peserta Zoom/Meet/Teams) terpisah, plus `meeting.wav`
+    (campuran), lewat ScreenCaptureKit (tanpa BlackHole, tetap jalan saat pakai headphone);
+  - `layar.mov`: video 720p 30 fps (H.264, ±1 GB per jam) berisi layar, suara peserta, dan suara mic
+    (macOS 15+). Jendela Meeting Notes sendiri tidak ikut terekam. Gagal merekam video tidak pernah
+    menghentikan rekaman audio.
+  - Sisa disk dipantau: peringatan bila sisa < 30 menit rekaman; bila < 10 menit, video dihentikan agar audio
+    untuk notulen tetap terekam sampai selesai.
+- **"Otak" Python (folder `meeting_notes`)**: setelah tombol stop, aplikasi menjalankan
+  `python -m meeting_notes proses` untuk transkripsi Whisper per jalur ("Saya (mic)" / "Peserta online"),
+  koreksi Claude, kamus, dan MoM. Rapat 1 jam di M1 8 GB: perkiraan ±5–12 menit sampai MoM jadi; notifikasi
+  muncul saat selesai.
 
 ## Membangun & menjalankan
 
@@ -40,8 +47,7 @@ open mac/build/MeetingNotes.app
 Pertama kali dibuka, macOS akan meminta izin:
 
 1. **Microphone**: klik *Allow*.
-2. **Speech Recognition**: klik *Allow* (untuk transkrip live).
-3. **Screen & System Audio Recording** (suara peserta Zoom/Meet/Teams): buka System Settings → Privacy &
+2. **Screen & System Audio Recording** (video layar dan suara peserta Zoom/Meet/Teams): buka System Settings → Privacy &
    Security → Screen & System Audio Recording → aktifkan **Meeting Notes**, lalu keluar dari aplikasi (ikon
    gelombang di menu bar → Keluar) dan buka lagi. Tanpa izin ini, aplikasi tetap merekam lewat mic saja.
    Pilihan eksperimental **Audio meeting via Core Audio** (menu bar, mati secara bawaan) butuh izin di bagian
@@ -67,6 +73,7 @@ System Settings → General → Login Items → **+** → pilih `mac/build/Meeti
 | Chip 👥 **Peserta** tidak pernah menyala / "Suara peserta belum terdengar sama sekali" | Izinkan Meeting Notes di **System Audio Recording Only** (lihat Izin). Pastikan **Audio meeting via Core Audio (eksperimental)** di menu bar tidak dicentang, izinkan Meeting Notes di **Screen & System Audio Recording**, keluar lalu buka lagi app. Cek baris `Audio sistem` di `rekaman.log` |
 | "Gagal mulai merekam" / "Mic gagal menyala" (mis. kode -10875) | Klik **Coba lagi**. Bila berulang: matikan **Peredam derau mic** di menu bar, tutup aplikasi lain yang mengunci mic, cek System Settings → Sound → Input. Detail percobaan ada di `rekaman.log` |
 | Ruangan bising / suara mic kurang jelas | Menu bar → **Peredam derau mic** (berlaku untuk rekaman berikutnya) |
-| Transkrip live: kata abu-abu lalu berubah putih | Normal: abu-abu = tebakan cepat pengenal Apple, putih = sudah dikoreksi Whisper (±5–15 detik kemudian, memakai kamus istilah) |
+| Video tidak ada / "Video tidak terekam" | Izinkan Meeting Notes di **Screen & System Audio Recording**, keluar lalu buka lagi app. Pilihan "jendela Teams/Zoom" butuh jendelanya terbuka (tidak diminimalkan) saat mulai merekam; bila tidak ketemu, seluruh layar yang direkam |
+| "Disk hampir penuh" | Kosongkan ruang disk (hapus `layar.mov` rapat lama di `~/MeetingNotes/rekaman/`; transkrip & MoM tetap tersimpan) |
 | Kartu "MoM belum tersusun" (mis. batas pemakaian Claude) | Klik **Susun ulang**: transkrip yang tersimpan dipakai, tanpa mentranskripsi ulang |
 | Aplikasi tertutup paksa / Mac mati saat merekam | Rekaman tetap bisa diproses: `python -m meeting_notes proses ~/MeetingNotes/rekaman/<waktu>/meeting.wav` |

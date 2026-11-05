@@ -1,16 +1,22 @@
 import AppKit
 import UserNotifications
 
-/// Mengatur alur: siap → merekam → memproses → selesai/gagal.
+/// Mengatur alur: siap → merekam (audio + video layar) → memproses (transkrip → MoM) → selesai/gagal.
+///
+/// Sejak 4.0.0 tidak ada transkripsi selama rapat: Mac tetap ringan (penting untuk RAM 8 GB) dan bagian yang
+/// bisa bermasalah lebih sedikit. Transkripsi dan MoM dikerjakan setelah rapat selesai.
 @MainActor
 final class MeetingController {
     let state: AppState
     let meter: LiveMeter
     private var capture: AudioCapture?
-    private var live: LiveTranscriber?
+    private var recorder: ScreenRecorder?
     private var processor: Processor?
-    private var worker: LiveWorker?
     private var timer: Timer?
+    private var ticks = 0
+    /// Disk hampir habis: video dihentikan agar audio untuk notulen tetap bisa direkam sampai akhir.
+    private static let stopVideoBelowMinutes = 10
+    private static let warnBelowMinutes = 30
     private var startedAt = Date()
     /// Pengawas: kapan jam audio terakhir bergerak (untuk memulihkan mic yang berhenti diam-diam).
     private var lastAudioProgress = Date()
@@ -41,23 +47,8 @@ final class MeetingController {
             return
         }
 
-        // Transkrip live opsional (menu bar) karena pengenal suara memakai CPU selama rapat.
-        let live: LiveTranscriber? = state.liveTranscript ? LiveTranscriber(
-            terms: Self.glossaryTerms(), corrections: Self.liveCorrections()
-        ) { [weak self] caption in
-            Task { @MainActor in
-                guard let self else { return }
-                self.meter.liveRefined = caption.refined
-                self.meter.liveText = caption.committed
-                self.meter.livePartial = caption.partial
-            }
-        } : nil
         let capture = AudioCapture(output: dir.appendingPathComponent("meeting.wav"),
                                    coreAudioTap: state.coreAudioTap, noiseReduction: state.micNoiseReduction)
-        live?.onLog = { line in capture.note(line) }
-        capture.onSamples = live.map { transcriber in
-            { buffer, rms, time in transcriber.append(buffer, rms: rms, time: time) }
-        }
         capture.onLevels = { [weak self] mic, system in
             Task { @MainActor in self?.meter.setLevels(mic: mic, system: system) }
         }
@@ -88,7 +79,6 @@ final class MeetingController {
             }
             self.state.starting = false
             self.capture = capture
-            self.live = live
             // Waktu mulai = saat mic benar-benar merekam (bukan saat klik; dialog izin bisa makan waktu).
             self.startedAt = Date()
             self.lastAudioProgress = Date()
@@ -99,20 +89,12 @@ final class MeetingController {
             self.state.marks = []
             self.meter.elapsed = 0
             self.meter.setLevels(mic: 0, system: 0)
-            self.meter.liveText = live == nil ? "Transkrip live dimatikan (hemat baterai)." : ""
-            self.meter.livePartial = ""
-            self.meter.liveRefined = ""
             self.state.result = nil
+            self.state.videoText = ""
+            self.ticks = 0
+            self.updateDiskSpace()
             self.state.phase = .recording
             self.state.expanded = true
-            live?.start()
-            let worker = LiveWorker(folder: dir)
-            // Hasil Whisper dari worker menggantikan kata-kata kasar transkrip live beberapa detik kemudian.
-            worker.onRefined = live.map { transcriber in
-                { until, texts in transcriber.applyRefined(until: until, texts: texts) }
-            }
-            worker.start()
-            self.worker = worker
             let timer = Timer(timeInterval: 0.5, repeats: true) { [weak controller = self] _ in
                 Task { @MainActor in controller?.tick() }
             }
@@ -133,30 +115,42 @@ final class MeetingController {
             } else if self.state.warning?.hasPrefix("Menunggu") == true {
                 self.state.warning = nil
             }
+            await self.startVideo(dir: dir, capture: capture)
         }
     }
 
-    /// Istilah dari kamus yang dipelajari (~/MeetingNotes/kamus.txt) lalu kamus dasar, untuk transkrip live.
-    private static func glossaryTerms() -> [String] {
-        let files = [
-            Config.outputDir.appendingPathComponent("kamus.txt"),
-            URL(fileURLWithPath: Config.repoPath).appendingPathComponent("meeting_notes/kamus_dasar.txt"),
-        ]
-        var seen = Set<String>()
-        return files.flatMap { url -> [String] in
-            let text = (try? String(contentsOf: url, encoding: .utf8)) ?? ""
-            return text.split(separator: "\n").map { $0.trimmingCharacters(in: .whitespaces) }
-                .filter { !$0.isEmpty && !$0.hasPrefix("#") }
+    /// Video layar menyusul setelah audio jalan. Gagal merekam video tidak pernah menghentikan rekaman audio.
+    private func startVideo(dir: URL, capture: AudioCapture) async {
+        let source = state.videoSource
+        guard source != .off else {
+            state.videoText = "Video tidak direkam"
+            return
         }
-        .filter { seen.insert($0.lowercased()).inserted }
-    }
-
-    /// Koreksi salah dengar yang dipelajari dari MoM sebelumnya (~/MeetingNotes/koreksi.txt) lalu koreksi bawaan.
-    private static func liveCorrections() -> [(String, String)] {
-        LiveCorrections.load(from: [
-            Config.outputDir.appendingPathComponent("koreksi.txt"),
-            URL(fileURLWithPath: Config.repoPath).appendingPathComponent("meeting_notes/koreksi_dasar.txt"),
-        ])
+        let recorder = ScreenRecorder(output: dir.appendingPathComponent("layar.mov"), source: source)
+        recorder.onLog = { line in capture.note(line) }
+        recorder.onStopped = { [weak self, weak recorder] message in
+            Task { @MainActor in
+                guard let self, let recorder, self.recorder === recorder else { return }
+                self.recorder = nil
+                self.state.videoText = "Video berhenti"
+                self.state.warning = message
+            }
+        }
+        do {
+            try await recorder.start()
+            guard self.capture === capture else {
+                await recorder.stop()
+                return
+            }
+            self.recorder = recorder
+            state.videoText = "Merekam \(recorder.targetText) · 720p"
+        } catch {
+            capture.note("Video gagal mulai: \(error.localizedDescription)")
+            state.videoText = "Video tidak terekam"
+            if state.warning == nil {
+                state.warning = "Video layar gagal direkam (\(error.localizedDescription)). Audio tetap direkam."
+            }
+        }
     }
 
     func markImportant() {
@@ -169,13 +163,14 @@ final class MeetingController {
         guard state.phase == .recording, let capture, let dir = state.recordingDir else { return }
         timer?.invalidate()
         timer = nil
-        live?.stop()
         capture.stop()
-        worker?.stop()
-        worker = nil
         meter.setLevels(mic: 0, system: 0)
         self.capture = nil
-        self.live = nil
+        if let recorder {
+            // Video ditutup di latar; transkripsi tidak perlu menunggu (memakai file WAV).
+            self.recorder = nil
+            Task { await recorder.stop() }
+        }
 
         let marksURL = dir.appendingPathComponent("penting.json")
         let marks = (try? JSONEncoder().encode(state.marks.map { ($0 * 10).rounded() / 10 })) ?? Data("[]".utf8)
@@ -201,15 +196,22 @@ final class MeetingController {
         processor.cancel()
     }
 
-    /// Dipanggil saat aplikasi ditutup: rekaman yang sedang berjalan ditutup rapi agar file WAV utuh, dan
-    /// transkripsi latar belakang dihentikan. Pemrosesan yang sedang berjalan dibiarkan selesai sendiri.
+    /// Dipanggil saat aplikasi ditutup: rekaman yang sedang berjalan ditutup rapi agar file WAV dan video utuh.
+    /// Pemrosesan yang sedang berjalan dibiarkan selesai sendiri.
     func shutdown() {
         guard state.phase == .recording, let capture, let dir = state.recordingDir else { return }
         timer?.invalidate()
-        live?.stop()
         capture.note("Aplikasi ditutup saat merekam; rekaman disimpan")
         capture.stop()
-        worker?.stop()
+        if let recorder {
+            // Tunggu video ditutup (paling lama 5 detik) agar file MOV bisa diputar.
+            let done = DispatchSemaphore(value: 0)
+            Task.detached {
+                await recorder.stop()
+                done.signal()
+            }
+            _ = done.wait(timeout: .now() + 5)
+        }
         let marks = (try? JSONEncoder().encode(state.marks)) ?? Data("[]".utf8)
         try? marks.write(to: dir.appendingPathComponent("penting.json"))
     }
@@ -247,6 +249,18 @@ final class MeetingController {
         NSWorkspace.shared.open(dir)
     }
 
+    /// Video rapat terakhir (bila direkam).
+    var videoURL: URL? {
+        guard let dir = state.recordingDir else { return nil }
+        let url = dir.appendingPathComponent("layar.mov")
+        return FileManager.default.fileExists(atPath: url.path) ? url : nil
+    }
+
+    func openVideo() {
+        guard let videoURL else { return }
+        NSWorkspace.shared.open(videoURL)
+    }
+
     func openResult() {
         guard let result = state.result else { return }
         // Buka Word bila dibuat; selain itu file Markdown (terbuka di aplikasi teks default).
@@ -263,8 +277,10 @@ final class MeetingController {
     // MARK: - Internal
 
     private func tick() {
-        // Durasi terekam (jam audio). Pergantian sesi transkrip live diatur LiveTranscriber sendiri.
+        // Durasi terekam (jam audio).
         guard let capture else { return }
+        ticks += 1
+        if ticks % 20 == 0 { updateDiskSpace() }
         let recorded = capture.recordedSeconds
         let seconds = recorded.rounded(.down)
         if meter.elapsed != seconds { meter.elapsed = seconds }
@@ -275,6 +291,29 @@ final class MeetingController {
             // Mic diam total 4 detik (biasanya setelah Mac bangun dari tidur): pasang ulang.
             lastAudioProgress = Date()
             capture.recoverIfStalled()
+        }
+    }
+
+    /// Sisa disk dalam menit rekaman (audio + video). Peringatan bila < 30 menit; bila < 10 menit video dihentikan
+    /// agar audio untuk notulen tetap terekam sampai rapat selesai.
+    private func updateDiskSpace() {
+        let dir = state.recordingDir ?? Config.outputDir
+        guard let values = try? dir.resourceValues(forKeys: [.volumeAvailableCapacityForImportantUsageKey]),
+              let free = values.volumeAvailableCapacityForImportantUsage
+        else { return }
+        let perMinute: Int64 = (recorder != nil ? ScreenRecorder.bytesPerMinute : 0) + 6 * 1024 * 1024
+        let minutes = Int(free / perMinute)
+        // Dibulatkan agar tampilan tidak berubah tiap 10 detik.
+        let shown = minutes > 120 ? minutes / 30 * 30 : minutes
+        if state.diskMinutesLeft != shown { state.diskMinutesLeft = shown }
+        guard state.phase == .recording else { return }
+        if minutes < Self.stopVideoBelowMinutes, let recorder {
+            self.recorder = nil
+            Task { await recorder.stop() }
+            state.videoText = "Video dihentikan (disk hampir penuh)"
+            state.warning = "Disk hampir penuh: video dihentikan, audio tetap direkam. Sisa ±\(minutes) menit."
+        } else if minutes < Self.warnBelowMinutes, state.warning == nil {
+            state.warning = "Disk hampir penuh: sisa ±\(minutes) menit rekaman. Kosongkan ruang disk."
         }
     }
 

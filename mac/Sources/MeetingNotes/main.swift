@@ -75,7 +75,13 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         menu.addItem(NSMenuItem(title: "Buka folder notulen", action: #selector(openFolder), keyEquivalent: ""))
         menu.addItem(.separator())
         menu.addItem(NSMenuItem(title: "Buat juga Word (.docx)", action: #selector(toggleDocx), keyEquivalent: ""))
-        menu.addItem(NSMenuItem(title: "Transkrip live", action: #selector(toggleLive), keyEquivalent: ""))
+        menu.addItem(.separator())
+        for source in VideoSource.allCases {
+            let item = NSMenuItem(title: source.menuTitle, action: #selector(chooseVideo(_:)), keyEquivalent: "")
+            item.representedObject = source.rawValue
+            menu.addItem(item)
+        }
+        menu.addItem(.separator())
         menu.addItem(NSMenuItem(title: "Audio meeting via Core Audio (eksperimental)", action: #selector(toggleTap), keyEquivalent: ""))
         menu.addItem(NSMenuItem(title: "Peredam derau mic", action: #selector(toggleNoise), keyEquivalent: ""))
         menu.addItem(.separator())
@@ -98,8 +104,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         for item in items {
             if item.action == #selector(toggleDocx) {
                 item.state = controller.state.exportDocx ? .on : .off
-            } else if item.action == #selector(toggleLive) {
-                item.state = controller.state.liveTranscript ? .on : .off
+            } else if item.action == #selector(chooseVideo(_:)) {
+                item.state = (item.representedObject as? String) == controller.state.videoSource.rawValue ? .on : .off
             } else if item.action == #selector(toggleTap) {
                 item.state = controller.state.coreAudioTap ? .on : .off
             } else if item.action == #selector(toggleNoise) {
@@ -120,7 +126,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     @objc private func toggle() { controller.toggle() }
     @objc private func openFolder() { controller.openFolder() }
     @objc private func toggleDocx() { controller.state.exportDocx.toggle() }
-    @objc private func toggleLive() { controller.state.liveTranscript.toggle() }
+    @objc private func chooseVideo(_ sender: NSMenuItem) {
+        guard let raw = sender.representedObject as? String, let source = VideoSource(rawValue: raw) else { return }
+        controller.state.videoSource = source
+    }
     @objc private func toggleTap() { controller.state.coreAudioTap.toggle() }
     @objc private func toggleNoise() { controller.state.micNoiseReduction.toggle() }
     @objc private func useIsland() { controller.state.style = .island }
